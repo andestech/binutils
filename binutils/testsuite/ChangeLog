@@ -1,3 +1,11 @@
+2015-02-26  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* binutils-all/update-1.s: New file.
+	* binutils-all/update-2.s: New file.
+	* binutils-all/update-3.s: New file.
+	* binutils-all/update-4.s: New file.
+	* binutils-all/update-section.exp: New file.
+
 2013-10-12  H.J. Lu  <hongjiu.lu@intel.com>
 
 	* binutils-all/x86-64/compressed-1a.d: Updated for 64-bit addresses.
