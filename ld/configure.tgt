@@ -583,8 +583,8 @@ nds32*le-*-elf*)	targ_emul=nds32elf
 nds32*be-*-elf*)	targ_emul=nds32belf
 			targ_extra_emuls="nds32elf nds32elf16m nds32belf16m"
 			;;
-nds32*le-*-linux-gnu*)	targ_emul=nds32elf_linux ;;
-nds32*be-*-linux-gnu*)	targ_emul=nds32belf_linux ;;
+nds32*le-*-linux*)	targ_emul=nds32elf_linux ;;
+nds32*be-*-linux*)	targ_emul=nds32belf_linux ;;
 nios2*-*-linux*)	targ_emul=nios2linux ;;
 nios2*-*-*)		targ_emul=nios2elf ;;
 ns32k-pc532-mach* | ns32k-pc532-ux*)  targ_emul=pc532macha ;;
