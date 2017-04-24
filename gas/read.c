@@ -1,5 +1,7 @@
 /* read.c - read a source file -
-   Copyright 1986-2013 Free Software Foundation, Inc.
+   Copyright 1986, 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997,
+   1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, 2011, 2012  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -1701,7 +1703,7 @@ s_comm_internal (int param,
 
   temp = get_absolute_expr (&exp);
   size = temp;
-  size &= ((offsetT) 2 << (stdoutput->arch_info->bits_per_address - 1)) - 1;
+  size &= ((addressT) 2 << (stdoutput->arch_info->bits_per_address - 1)) - 1;
   if (exp.X_op == O_absent)
     {
       as_bad (_("missing size expression"));
@@ -5017,7 +5019,7 @@ output_big_sleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
     {
       /* Sign-extend VAL.  */
       if (val & (1 << (loaded - 1)))
-	val |= ~0 << loaded;
+	val |= ~0U << loaded;
       if (orig)
 	*p = val & 0x7f;
       p++;
@@ -5792,8 +5794,8 @@ add_include_dir (char *path)
     {
       include_dir_count++;
       include_dirs =
-	(char **) xrealloc (include_dirs,
-			    include_dir_count * sizeof (*include_dirs));
+	(char **) realloc (include_dirs,
+			   include_dir_count * sizeof (*include_dirs));
     }
 
   include_dirs[include_dir_count - 1] = path;	/* New one.  */

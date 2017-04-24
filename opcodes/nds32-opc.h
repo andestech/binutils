@@ -1,30 +1,5 @@
-/* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2013 Free Software Foundation, Inc.
-   Contributed by Andes Technology Corporation.
-
-   This file is part of BFD, the Binary File Descriptor library.
-
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
-   02110-1301, USA.*/
-
-
 #ifndef NDS32_OPC_H
-#define NDS32_OPC_H
-
-/* This was the enum used for 32/16 conversion.  */
-
+#define NDS32_OPC_H 
 enum
 {
   NDS32_INSN_INVALID, NDS32_INSN_MOVI, NDS32_INSN_SETHI, NDS32_INSN_ADDI,
@@ -205,5 +180,4 @@ enum
   NDS32_INSN_CLROV, NDS32_INSN_IFCALL9, NDS32_INSN_IFCALL, NDS32_INSN_IFRET,
   NDS32_INSN_EX5_IT, NDS32_INSN_EX9_IT
 };
-
 #endif

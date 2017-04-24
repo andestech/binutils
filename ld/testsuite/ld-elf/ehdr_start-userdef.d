@@ -3,7 +3,6 @@
 #readelf: -Ws
 #target: *-*-linux* *-*-gnu* *-*-nacl*
 
-#...
 Symbol table '\.symtab' contains [0-9]+ entries:
 #...
  *[0-9]+: 0*12345678 +0 +NOTYPE +GLOBAL +DEFAULT +ABS +__ehdr_start

@@ -772,8 +772,6 @@ static const arch_entry cpu_arch[] =
     CPU_BDVER2_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("bdver3"), PROCESSOR_BD,
     CPU_BDVER3_FLAGS, 0, 0 },
-  { STRING_COMMA_LEN ("bdver4"), PROCESSOR_BD,
-    CPU_BDVER4_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("btver1"), PROCESSOR_BT,
     CPU_BTVER1_FLAGS, 0, 0 },
   { STRING_COMMA_LEN ("btver2"), PROCESSOR_BT,
@@ -1923,47 +1921,46 @@ mode_from_disp_size (i386_operand_type t)
 }
 
 static INLINE int
-fits_in_signed_byte (offsetT num)
+fits_in_signed_byte (addressT num)
 {
-  return (num >= -128) && (num <= 127);
+  return num + 0x80 <= 0xff;
 }
 
 static INLINE int
-fits_in_unsigned_byte (offsetT num)
+fits_in_unsigned_byte (addressT num)
 {
-  return (num & 0xff) == num;
+  return num <= 0xff;
 }
 
 static INLINE int
-fits_in_unsigned_word (offsetT num)
+fits_in_unsigned_word (addressT num)
 {
-  return (num & 0xffff) == num;
+  return num <= 0xffff;
 }
 
 static INLINE int
-fits_in_signed_word (offsetT num)
+fits_in_signed_word (addressT num)
 {
-  return (-32768 <= num) && (num <= 32767);
+  return num + 0x8000 <= 0xffff;
 }
 
 static INLINE int
-fits_in_signed_long (offsetT num ATTRIBUTE_UNUSED)
+fits_in_signed_long (addressT num ATTRIBUTE_UNUSED)
 {
 #ifndef BFD64
   return 1;
 #else
-  return (!(((offsetT) -1 << 31) & num)
-	  || (((offsetT) -1 << 31) & num) == ((offsetT) -1 << 31));
+  return num + 0x80000000 <= 0xffffffff;
 #endif
 }				/* fits_in_signed_long() */
 
 static INLINE int
-fits_in_unsigned_long (offsetT num ATTRIBUTE_UNUSED)
+fits_in_unsigned_long (addressT num ATTRIBUTE_UNUSED)
 {
 #ifndef BFD64
   return 1;
 #else
-  return (num & (((offsetT) 2 << 31) - 1)) == num;
+  return num <= 0xffffffff;
 #endif
 }				/* fits_in_unsigned_long() */
 
@@ -5421,7 +5418,7 @@ check_long_reg (void)
 		i.suffix);
 	return 0;
       }
-    /* Warn if the e prefix on a general reg is missing.  */
+  /* Warn if the e prefix on a general reg is missing.  */
     else if ((!quiet_warnings || flag_code == CODE_64BIT)
 	     && i.types[op].bitfield.reg16
 	     && (i.tm.operand_types[op].bitfield.reg32
@@ -5437,13 +5434,16 @@ check_long_reg (void)
 	    return 0;
 	  }
 #if REGISTER_WARNINGS
-	as_warn (_("using `%s%s' instead of `%s%s' due to `%c' suffix"),
-		 register_prefix,
-		 (i.op[op].regs + REGNAM_EAX - REGNAM_AX)->reg_name,
-		 register_prefix, i.op[op].regs->reg_name, i.suffix);
+	else
+	  as_warn (_("using `%s%s' instead of `%s%s' due to `%c' suffix"),
+		   register_prefix,
+		   (i.op[op].regs + REGNAM_EAX - REGNAM_AX)->reg_name,
+		   register_prefix,
+		   i.op[op].regs->reg_name,
+		   i.suffix);
 #endif
       }
-    /* Warn if the r prefix on a general reg is present.  */
+  /* Warn if the r prefix on a general reg is missing.  */
     else if (i.types[op].bitfield.reg64
 	     && (i.tm.operand_types[op].bitfield.reg32
 		 || i.tm.operand_types[op].bitfield.acc))
@@ -5486,7 +5486,7 @@ check_qword_reg (void)
 		i.suffix);
 	return 0;
       }
-    /* Warn if the r prefix on a general reg is missing.  */
+  /* Warn if the e prefix on a general reg is missing.  */
     else if ((i.types[op].bitfield.reg16
 	      || i.types[op].bitfield.reg32)
 	     && (i.tm.operand_types[op].bitfield.reg32
@@ -5531,10 +5531,9 @@ check_word_reg (void)
 		i.suffix);
 	return 0;
       }
-    /* Warn if the e or r prefix on a general reg is present.  */
+  /* Warn if the e prefix on a general reg is present.  */
     else if ((!quiet_warnings || flag_code == CODE_64BIT)
-	     && (i.types[op].bitfield.reg32
-		 || i.types[op].bitfield.reg64)
+	     && i.types[op].bitfield.reg32
 	     && (i.tm.operand_types[op].bitfield.reg16
 		 || i.tm.operand_types[op].bitfield.acc))
       {
@@ -5547,11 +5546,14 @@ check_word_reg (void)
 		    i.suffix);
 	    return 0;
 	  }
+	else
 #if REGISTER_WARNINGS
-	as_warn (_("using `%s%s' instead of `%s%s' due to `%c' suffix"),
-		 register_prefix,
-		 (i.op[op].regs + REGNAM_AX - REGNAM_EAX)->reg_name,
-		 register_prefix, i.op[op].regs->reg_name, i.suffix);
+	  as_warn (_("using `%s%s' instead of `%s%s' due to `%c' suffix"),
+		   register_prefix,
+		   (i.op[op].regs + REGNAM_AX - REGNAM_EAX)->reg_name,
+		   register_prefix,
+		   i.op[op].regs->reg_name,
+		   i.suffix);
 #endif
       }
   return 1;

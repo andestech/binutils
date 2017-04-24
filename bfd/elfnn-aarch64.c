@@ -1679,8 +1679,8 @@ _aarch64_elf_section_data;
 #define elf_aarch64_section_data(sec) \
   ((_aarch64_elf_section_data *) elf_section_data (sec))
 
-/* The size of the thread control block which is defined to be two pointers.  */
-#define TCB_SIZE	(ARCH_SIZE/8)*2
+/* The size of the thread control block.  */
+#define TCB_SIZE	16
 
 struct elf_aarch64_local_symbol
 {
@@ -3589,8 +3589,7 @@ elfNN_aarch64_final_link_relocate (reloc_howto_type *howto,
 
 	      if (globals->root.splt != NULL)
 		{
-		  plt_index = ((h->plt.offset - globals->plt_header_size) /
-			       globals->plt_entry_size);
+		  plt_index = h->plt.offset / globals->plt_entry_size - 1;
 		  off = (plt_index + 3) * GOT_ENTRY_SIZE;
 		  base_got = globals->root.sgotplt;
 		}
@@ -4145,12 +4144,12 @@ elfNN_aarch64_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean warned, ignored;
+	  bfd_boolean warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 
 	  sym_type = h->type;
 	}
@@ -4534,6 +4533,31 @@ elfNN_aarch64_set_private_flags (bfd *abfd, flagword flags)
       elf_elfheader (abfd)->e_flags = flags;
       elf_flags_init (abfd) = TRUE;
     }
+
+  return TRUE;
+}
+
+/* Copy backend specific data from one object module to another.  */
+
+static bfd_boolean
+elfNN_aarch64_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
+{
+  flagword in_flags;
+
+  if (!is_aarch64_elf (ibfd) || !is_aarch64_elf (obfd))
+    return TRUE;
+
+  in_flags = elf_elfheader (ibfd)->e_flags;
+
+  elf_elfheader (obfd)->e_flags = in_flags;
+  elf_flags_init (obfd) = TRUE;
+
+  /* Also copy the EI_OSABI field.  */
+  elf_elfheader (obfd)->e_ident[EI_OSABI] =
+    elf_elfheader (ibfd)->e_ident[EI_OSABI];
+
+  /* Copy object attributes.  */
+  _bfd_elf_copy_obj_attributes (ibfd, obfd);
 
   return TRUE;
 }
@@ -5479,7 +5503,7 @@ elfNN_aarch64_post_process_headers (bfd *abfd,
   i_ehdrp = elf_elfheader (abfd);
   i_ehdrp->e_ident[EI_ABIVERSION] = AARCH64_ELF_ABI_VERSION;
 
-  _bfd_elf_post_process_headers (abfd, link_info);
+  _bfd_elf_set_osabi (abfd, link_info);
 }
 
 static enum elf_reloc_type_class
@@ -6799,34 +6823,7 @@ elfNN_aarch64_finish_dynamic_symbol (bfd *output_bfd,
 		       + htab->root.sgot->output_offset
 		       + (h->got.offset & ~(bfd_vma) 1));
 
-      if (h->def_regular
-	  && h->type == STT_GNU_IFUNC)
-	{
-	  if (info->shared)
-	    {
-	      /* Generate R_AARCH64_GLOB_DAT.  */
-	      goto do_glob_dat;
-	    }
-	  else
-	    {
-	      asection *plt;
-
-	      if (!h->pointer_equality_needed)
-		abort ();
-
-	      /* For non-shared object, we can't use .got.plt, which
-		 contains the real function address if we need pointer
-		 equality.  We load the GOT entry with the PLT entry.  */
-	      plt = htab->root.splt ? htab->root.splt : htab->root.iplt;
-	      bfd_put_NN (output_bfd, (plt->output_section->vma
-				       + plt->output_offset
-				       + h->plt.offset),
-			  htab->root.sgot->contents
-			  + (h->got.offset & ~(bfd_vma) 1));
-	      return TRUE;
-	    }
-	}
-      else if (info->shared && SYMBOL_REFERENCES_LOCAL (info, h))
+      if (info->shared && SYMBOL_REFERENCES_LOCAL (info, h))
 	{
 	  if (!h->def_regular)
 	    return FALSE;
@@ -6839,7 +6836,6 @@ elfNN_aarch64_finish_dynamic_symbol (bfd *output_bfd,
 	}
       else
 	{
-do_glob_dat:
 	  BFD_ASSERT ((h->got.offset & 1) == 0);
 	  bfd_put_NN (output_bfd, (bfd_vma) 0,
 		      htab->root.sgot->contents + h->got.offset);
@@ -7200,6 +7196,9 @@ const struct elf_size_info elfNN_aarch64_size_info =
 
 #define bfd_elfNN_close_and_cleanup             \
   elfNN_aarch64_close_and_cleanup
+
+#define bfd_elfNN_bfd_copy_private_bfd_data	\
+  elfNN_aarch64_copy_private_bfd_data
 
 #define bfd_elfNN_bfd_free_cached_info          \
   elfNN_aarch64_bfd_free_cached_info

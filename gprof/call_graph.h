@@ -22,6 +22,12 @@
 #ifndef call_graph_h
 #define call_graph_h
 
+void
+tl_cg_tally (bfd_vma from_pc,
+             bfd_vma self_pc,
+             unsigned int count, // 0 when return and 1 when call
+             unsigned int icnt,  // 0 when call
+             unsigned int ccnt);  // 0 when call
 extern void cg_tally      (bfd_vma, bfd_vma, unsigned long);
 extern void cg_read_rec   (FILE *, const char *);
 extern void cg_write_arcs (FILE *, const char *);

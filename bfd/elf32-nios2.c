@@ -1136,7 +1136,7 @@ bfd_vma hiadj (bfd_vma symbol_value)
 /* Do the relocations that require special handling.  */
 static bfd_reloc_status_type
 nios2_elf32_do_hi16_relocate (bfd *abfd, reloc_howto_type *howto, 
-			      asection *input_section,
+			      asection *input_section ATTRIBUTE_UNUSED, 
 			      bfd_byte *data, bfd_vma offset, 
 			      bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1149,7 +1149,7 @@ nios2_elf32_do_hi16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_lo16_relocate (bfd *abfd, reloc_howto_type *howto,
-			      asection *input_section,
+			      asection *input_section ATTRIBUTE_UNUSED, 
 			      bfd_byte *data, bfd_vma offset, 
 			      bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1162,7 +1162,7 @@ nios2_elf32_do_lo16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_hiadj16_relocate (bfd *abfd, reloc_howto_type *howto,
-				 asection *input_section,
+				 asection *input_section ATTRIBUTE_UNUSED, 
 				 bfd_byte *data, bfd_vma offset,
 				 bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1175,7 +1175,7 @@ nios2_elf32_do_hiadj16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_pcrel_lo16_relocate (bfd *abfd, reloc_howto_type *howto,
-				    asection *input_section,
+				    asection *input_section ATTRIBUTE_UNUSED,
 				    bfd_byte *data, bfd_vma offset,
 				    bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1188,7 +1188,8 @@ nios2_elf32_do_pcrel_lo16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_pcrel_hiadj16_relocate (bfd *abfd, reloc_howto_type *howto,
-				       asection *input_section,
+				       asection *input_section
+				       ATTRIBUTE_UNUSED,
 				       bfd_byte *data, bfd_vma offset,
 				       bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1204,7 +1205,7 @@ nios2_elf32_do_pcrel_hiadj16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_pcrel16_relocate (bfd *abfd, reloc_howto_type *howto,
-				 asection *input_section,
+				 asection *input_section ATTRIBUTE_UNUSED, 
 				 bfd_byte *data, bfd_vma offset, 
 				 bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1218,7 +1219,7 @@ nios2_elf32_do_pcrel16_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_call26_relocate (bfd *abfd, reloc_howto_type *howto,
-				asection *input_section,
+				asection *input_section ATTRIBUTE_UNUSED, 
 				bfd_byte *data, bfd_vma offset, 
 				bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1233,7 +1234,7 @@ nios2_elf32_do_call26_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_gprel_relocate (bfd *abfd, reloc_howto_type *howto,
-			       asection *input_section,
+			       asection *input_section ATTRIBUTE_UNUSED, 
 			       bfd_byte *data, bfd_vma offset, 
 			       bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1245,7 +1246,7 @@ nios2_elf32_do_gprel_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_ujmp_relocate (bfd *abfd, reloc_howto_type *howto,
-			      asection *input_section,
+			      asection *input_section ATTRIBUTE_UNUSED, 
 			      bfd_byte *data, bfd_vma offset, 
 			      bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1268,7 +1269,7 @@ nios2_elf32_do_ujmp_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_cjmp_relocate (bfd *abfd, reloc_howto_type *howto,
-			      asection *input_section,
+			      asection *input_section ATTRIBUTE_UNUSED, 
 			      bfd_byte *data, bfd_vma offset, 
 			      bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1291,7 +1292,7 @@ nios2_elf32_do_cjmp_relocate (bfd *abfd, reloc_howto_type *howto,
 
 static bfd_reloc_status_type
 nios2_elf32_do_callr_relocate (bfd *abfd, reloc_howto_type *howto,
-			       asection *input_section,
+			       asection *input_section ATTRIBUTE_UNUSED, 
 			       bfd_byte *data, bfd_vma offset, 
 			       bfd_vma symbol_value, bfd_vma addend)
 {
@@ -1717,12 +1718,12 @@ nios2_elf32_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean warned, ignored;
+	  bfd_boolean warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec && discarded_section (sec))
@@ -2841,7 +2842,7 @@ nios2_elf32_check_relocs (bfd *abfd, struct bfd_link_info *info,
    relocation.  */
 static asection *
 nios2_elf32_gc_mark_hook (asection *sec,
-			  struct bfd_link_info *info,
+			  struct bfd_link_info *info ATTRIBUTE_UNUSED,
 			  Elf_Internal_Rela *rel,
 			  struct elf_link_hash_entry *h,
 			  Elf_Internal_Sym *sym)

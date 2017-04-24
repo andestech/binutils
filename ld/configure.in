@@ -187,7 +187,6 @@ AC_SUBST(HDEFINES)
 AC_SUBST(HOSTING_CRT0)
 AC_SUBST(HOSTING_SCRT0)
 AC_SUBST(HOSTING_LIBS)
-AC_SUBST(HOSTING_SLIBS)
 AC_SUBST(NATIVE_LIB_DIRS)
 
 AC_CHECK_HEADERS(string.h strings.h stdlib.h unistd.h elf-hints.h limits.h locale.h sys/param.h)
@@ -306,6 +305,44 @@ do
     fi
 
     . ${srcdir}/configure.tgt
+
+    case ${target_cpu} in
+      nds32*)
+	case ${targ} in
+	  *-*-linux*)
+	    AC_DEFINE(NDS32_LINUX_TOOLCHAIN, 1,
+		      [Define if linux toolchain is to be built.])
+	  ;;
+	esac
+
+	AC_MSG_CHECKING(for default configuration of --enable-ifc-ext)
+	if test "x${enable_ifc_ext}" == xyes; then
+	  AC_DEFINE(NDS32_IFC_EXT, 1,
+		    [Define if ifc-ext of nds32 target is supported.])
+	fi
+	AC_MSG_RESULT($enable_ifc_ext)
+
+	AC_MSG_CHECKING(for default configuration of --enable-ex9-ext)
+	if test "x${enable_ex9_ext}" == xyes; then
+	  AC_DEFINE(NDS32_EX9_EXT, 1,
+		    [Define if ex9-ext of nds32 target is supported.])
+	fi
+	AC_MSG_RESULT($enable_ex9_ext)
+
+	AC_MSG_CHECKING(for default configuration of --enable-16m-addr)
+	if test "x${enable_16m_addr}" == xyes; then
+	  case ${targ} in
+	    nds32*le-*-elf*)
+	      targ_emul=nds32elf16m 
+	    ;;
+	    nds32*be-*-elf*)
+	      targ_emul=nds32belf16m 
+	    ;;
+	  esac
+	fi
+	AC_MSG_RESULT($enable_16m-addr)
+      ;;
+    esac
 
     if test "$targ" = "$target"; then
       EMUL=$targ_emul

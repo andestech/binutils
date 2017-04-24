@@ -553,6 +553,9 @@ disassembler_usage (stream)
 #ifdef ARCH_mips
   print_mips_disassembler_options (stream);
 #endif
+#ifdef ARCH_nds32
+  print_nds32_disassembler_options (stream);
+#endif
 #ifdef ARCH_powerpc
   print_ppc_disassembler_options (stream);
 #endif
@@ -620,6 +623,11 @@ disassemble_init_for_target (struct disassemble_info * info)
 	  else
 	    cgen_bitset_set (info->insn_sets, ISA_M32C);
 	}
+      break;
+#endif
+#ifdef ARCH_nds32
+    case bfd_arch_nds32:
+      disassemble_init_for_nds32 (info);
       break;
 #endif
 #ifdef ARCH_powerpc

@@ -50,6 +50,9 @@ case "${$2}" in
     i[[34567]]86-*-* | x86_64-*-*)
 	$1=-fpic
 	;;
+    m68k-*-*)
+	$1=-fpic
+	;;
     # FIXME: Override -fPIC default in libgcc only? 
     sh-*-linux* | sh[[2346lbe]]*-*-linux*)
 	$1=-fpic

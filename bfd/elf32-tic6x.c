@@ -2309,12 +2309,12 @@ elf32_tic6x_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean warned, ignored;
+	  bfd_boolean warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
@@ -4345,6 +4345,14 @@ elf32_tic6x_write_section (bfd *output_bfd,
   return TRUE;
 }
 
+static void
+elf32_tic6x_set_osabi (bfd *abfd, struct bfd_link_info *link_info)
+{
+  if (link_info != NULL && link_info->relocatable)
+    return;
+  _bfd_elf_set_osabi (abfd, link_info);
+}
+
 #define TARGET_LITTLE_SYM	bfd_elf32_tic6x_le_vec
 #define TARGET_LITTLE_NAME	"elf32-tic6x-le"
 #define TARGET_BIG_SYM		bfd_elf32_tic6x_be_vec
@@ -4426,6 +4434,9 @@ elf32_tic6x_write_section (bfd *output_bfd,
 #undef ELF_OSABI
 #define	ELF_OSABI			ELFOSABI_C6000_LINUX
 
+#undef elf_backend_post_process_headers
+#define elf_backend_post_process_headers	elf32_tic6x_set_osabi
+
 #include "elf32-target.h"
 
 #undef elf32_bed
@@ -4441,5 +4452,8 @@ elf32_tic6x_write_section (bfd *output_bfd,
 #define	TARGET_BIG_NAME			"elf32-tic6x-elf-be"
 #undef ELF_OSABI
 #define	ELF_OSABI			ELFOSABI_C6000_ELFABI
+
+#undef elf_backend_post_process_headers
+#define elf_backend_post_process_headers	elf32_tic6x_set_osabi
 
 #include "elf32-target.h"

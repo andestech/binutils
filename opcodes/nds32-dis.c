@@ -1,25 +1,3 @@
-/* NDS32-specific support for 32-bit ELF.
-   Copyright (C) 2012-2013 Free Software Foundation, Inc.
-   Contributed by Andes Technology Corporation.
-
-   This file is part of BFD, the Binary File Descriptor library.
-
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
-   02110-1301, USA.*/
-
-
 #include "sysdep.h"
 #include <stdio.h>
 #include "ansidecl.h"
@@ -29,1255 +7,1136 @@
 #include "libiberty.h"
 #include "opintl.h"
 #include "bfd_stdint.h"
-
-#define __MF(v, off, bs)	((v & ((1 << (bs)) - 1)) << (off))
-#define __GF(v, off, bs)	((v >> (off)) & ((1 << (bs)) - 1))
-#define __PF(v, off, bs, val)	do { v = __put_field (v, off, bs, val); } while (0)
-/* #define __SEXT(v, bs)	((v ^ (1 << (bs - 1))) - (1 << (bs - 1))) */
-#define __SEXT(v, bs)		(((v & ((1 << bs) - 1)) ^ (1 << (bs - 1))) - (1 << (bs - 1)))
-#define __BIT(n)		(1 << n)
-
-/* Get fields */
-#define OP6(insn)	((insn >> 25) & 0x3F)
-#define RT5(insn)	((insn >> 20) & 0x1F)
-#define RA5(insn)	((insn >> 15) & 0x1F)
-#define RB5(insn)	((insn >> 10) & 0x1F)
-#define RD5(insn)	((insn >> 5) & 0x1F)
-#define SUB5(insn)	((insn >> 0) & 0x1F)
-#define SUB10(insn)	((insn >> 0) & 0x3FF)
-#define IMMU(insn, bs)	(insn & ((1 << bs) - 1))
-#define IMMS(insn, bs)	__SEXT ((insn & ((1 << bs) - 1)), bs)
-#define IMM1U(insn)	IMMU ((insn >> 10), 5)
-#define IMM1S(insn)	IMMS ((insn >> 10), 5)
-#define IMM2U(insn)	IMMU ((insn >> 5), 5)
-#define IMM2S(insn)	IMMS ((insn >> 5), 5)
-
-/* Default text to print if an instruction isn't recognized.  */
+#include "hashtab.h"
+#include "nds32-asm.h"
+#include "opcode/nds32.h"
+#define MASK_OP(insn,mask) ((insn) & (0x3f << 25 | (mask)))
+enum map_type
+{
+  MAP_DATA0,
+  MAP_DATA1,
+  MAP_DATA2,
+  MAP_DATA3,
+  MAP_DATA4,
+  MAP_CODE,
+};
+struct nds32_private_data
+{
+  int has_mapping_symbols;
+  enum map_type last_mapping_type;
+  int last_symbol_index;
+  bfd_vma last_addr;
+};
 #define UNKNOWN_INSN_MSG _("*unknown*")
-
-static const char *mnemonic_op6[] =
+#define NDS32_PARSE_INSN16 0x01
+#define NDS32_PARSE_INSN32 0x02
+static void print_insn16 (bfd_vma pc, disassemble_info *info,
+     uint32_t insn, uint32_t parse_mode);
+static void print_insn32 (bfd_vma pc, disassemble_info *info, uint32_t insn,
+     uint32_t parse_mode);
+static uint32_t nds32_mask_opcode (uint32_t);
+static void nds32_special_opcode (uint32_t, struct nds32_opcode **);
+static int get_mapping_symbol_type (struct disassemble_info *info, int n,
+        enum map_type *map_type);
+static int is_mapping_symbol (struct disassemble_info *info, int n,
+         enum map_type *map_type);
+extern const field_t *nds32_field_table[NDS32_CORE_COUNT];
+extern opcode_t *nds32_opcode_table[NDS32_CORE_COUNT];
+extern keyword_t **nds32_keyword_table[NDS32_CORE_COUNT];
+extern struct nds32_opcode nds32_opcodes[];
+extern const field_t operand_fields[];
+extern keyword_t *keywords[];
+extern const keyword_t keyword_gpr[];
+struct objdump_disasm_info
 {
-  "lbi",  "lhi",   "lwi",  "ldi",    "lbi.bi",  "lhi.bi",  "lwi.bi",  "ldi.bi",
-  "sbi",  "shi",   "swi",  "sdi",    "sbi.bi",  "shi.bi",  "swi.bi",  "sdi.bi",
-  "lbsi", "lhsi",  "lwsi", "dprefi", "lbsi.bi", "lhsi.bi", "lwsi.bi", "lbgp",
-  "lwc",  "swc",   "ldc",  "sdc",    "mem",     "lsmw",    "hwgp",    "sbgp",
-  "alu1", "alu2",  "movi", "sethi",  "ji",      "jreg",    "br1",     "br2",
-  "addi", "subri", "andi", "xori",   "ori",     "br3",     "slti",    "sltsi",
-  "aext", "cext",  "misc", "bitci",  "op_64",   "cop"
+  bfd * abfd;
+  asection * sec;
+  bfd_boolean require_sec;
+  arelent ** dynrelbuf;
+  long dynrelcount;
+  disassembler_ftype disassemble_fn;
+  arelent * reloc;
 };
-
-static const char *mnemonic_mem[] =
+static htab_t opcode_htab;
+static keyword_t *
+nds32_find_reg_keyword (keyword_t *reg, int value)
 {
-  "lb",   "lh",  "lw",   "ld",    "lb.bi",  "lh.bi",  "lw.bi",  "ld.bi",
-  "sb",   "sh",  "sw",   "sd",    "sb.bi",  "sh.bi",  "sw.bi",  "sd.bi",
-  "lbs",  "lhs", "lws",  "dpref", "lbs.bi", "lhs.bi", "lws.bi", "27",
-  "llw",  "scw", "32",   "33",    "34",     "35",     "36",     "37",
-  "lbup", "41",  "lwup", "43",    "44",     "45",     "46",     "47",
-  "sbup", "51",  "swup"
-};
-
-static const char *mnemonic_alu1[] =
-{
-  "add",  "sub",  "and",   "xor",   "or",       "nor",      "slt",      "slts",
-  "slli", "srli", "srai",  "rotri", "sll",      "srl",      "sra",      "rotr",
-  "seb",  "seh",  "bitc",  "zeh",   "wsbh",     "or_srli",  "divsr",    "divr",
-  "sva",  "svs",  "cmovz", "cmovn", "add_srli", "sub_srli", "and_srli", "xor_srli"
-};
-
-
-static const char *mnemonic_alu20[] =
-{
-  "max",     "min",    "ave",     "abs",    "clips",   "clip",   "clo",    "clz",
-  "bset",    "bclr",   "btgl",    "btst",   "bse",     "bsp",    "ffb",    "ffmism",
-  "add.sc",  "sub.sc", "add.wc",  "sub.wc", "24",      "25",     "26",     "ffzmism",
-  "qadd",    "qsub",   "32",      "33",     "34",      "35",     "36",     "37",
-  "mfusr",   "mtusr",  "42",      "43",     "mul",     "45",     "46",     "47",
-  "mults64", "mult64", "madds64", "madd64", "msubs64", "msub64", "divs", "div",
-  "60",      "mult32", "62",      "madd32", "64",      "msub32", "65",   "66",
-  "dmadd",   "dmaddc", "dmsub",   "dmsubc", "rmfhi",   "qmflo"
-};
-
-static const char *mnemonic_alu21[] =
-{
-  "00",      "01",     "02", "03",      "04", "05",      "06",   "07",
-  "10",      "11",     "12", "13",      "14", "15",      "ffbi", "flmism",
-  "20",      "21",     "22", "23",      "24", "25",      "26",   "27",
-  "30",      "31",     "32", "33",      "34", "35",      "36",   "37",
-  "40",      "41",     "42", "43",      "44", "45",      "46",   "47",
-  "mulsr64", "mulr64", "52", "53",      "54", "55",      "56",   "57",
-  "60",      "61",     "62", "maddr32", "64", "msubr32", "66",   "67",
-  "70",      "71",     "72", "73",      "74", "75",      "76",   "77"
-};
-
-static const char *mnemonic_br2[] =
-{
-  "ifcall", "01", "beqz", "bnez", "bgez",   "bltz",   "bgtz", "blez",
-  "10",     "11", "12",   "13",   "bgezal", "bltzal"
-};
-
-static const char *mnemonic_misc[] =
-{
-  "standby", "cctl", "mfsr",  "mtsr",    "iret",  "trap",  "teqz", "tnez",
-  "dsb",     "isb",  "break", "syscall", "msync", "isync", "tlbop"
-};
-
-static const char *mnemonic_hwgp[] =
-{
-  "lhi.gp", "lhi.gp", "lhsi.gp", "lhsi.gp",
-  "shi.gp", "shi.gp", "lwi.gp", "swi.gp"
-};
-
-static const char *keyword_dpref[] =
-{
-  "SRD", "MRD", "SWR", "MWR", "PTE", "CLWR", "6",  "7",
-  "8",   "9",   "10",  "11",  "12",  "13",   "14", "15"
-};
-
-static const char *mnemonic_alu[] =
-{
-  "fadds",   "fsubs",   "fcpynss", "fcpyss",  "fmadds",
-  "fmsubs",  "fcmovns", "fcmovzs", "fnmadds", "fnmsubs",
-  "10",      "11",      "fmuls",   "fdivs",   "faddd",
-  "fsubd",   "fcpynsd", "fcpysd",  "fmaddd",  "fmsubd",
-  "fcmovnd", "fcmovzd", "fnmaddd", "fnmsubd", "24",
-  "25",      "fmuld",   "fdivd"
-};
-
-static const char *mnemonic_fpu_2op[] =
-{
-  "fs2d",  "fsqrts",  "2",     "3",  "4",       "fabss",  "6",      "7",
-  "fui2s", "9",       "10",    "11", "fsi2s",   "13",     "14",     "15",
-  "fs2ui", "17",      "18",    "19", "fs2ui.z", "21",     "22",     "23",
-  "fs2si", "25",      "26",    "27", "fs2si.z", "fd2s",   "fsqrtd", "31",
-  "32",    "33",      "fabsd", "35", "36",      "fui2d",  "38",     "39",
-  "40",    "fsi2d",   "42",    "43", "44",      "fd2ui",  "46",     "47",
-  "48",    "fd2ui.z", "50",    "51", "52",      "fd2si",  "54",     "55",
-  "56",    "fd2si.z"
-};
-
-static const char *mnemonic_fs2_cmp[] =
-{
-  "fcmpeqs", "fcmpeqs.e", "fcmplts", "fcmplts.e",
-  "fcmples", "fcmples.e", "fcmpuns", "fcmpuns.e"
-};
-
-static const char *mnemonic_fd2_cmp[] =
-{
-  "fcmpeqd", "fcmpeqd.e", "fcmpltd", "fcmpltd.e",
-  "fcmpled", "fcmpled.e", "fcmpund", "fcmpund.e"
-};
-
-/* Register name table.  */
-/* General purpose register.  */
-
-static const char *gpr_map[] =
-{
-  "$r0", "$r1", "$r2", "$r3", "$r4", "$r5", "$r6", "$r7",
-  "$r8", "$r9", "$r10", "$r11", "$r12", "$r13", "$r14", "$r15",
-  "$r16", "$r17", "$r18", "$r19", "$r20", "$r21", "$r22", "$r23",
-  "$r24", "$r25", "$r26", "$r27", "$fp", "$gp", "$lp", "$sp"
-};
-
-/* User special register.  */
-
-static const char *usr_map[][32] =
-{
-  {
-    "d0.lo", "d0.hi", "d1.lo", "d1.hi", "4",  "5",  "6",  "7",
-    "8",     "9",     "10",    "11",    "12", "13", "14", "15",
-    "16",    "17",    "18",    "19",    "20", "21", "22", "23",
-    "24",    "25",    "26",    "27",    "28", "29", "30", "pc"
-  },
-  {
-    "DMA_CFG",     "DMA_GCSW",    "DMA_CHNSEL", "DMA_ACT",    "DMA_SETUP",
-    "DMA_ISADDR",  "DMA_ESADDR",  "DMA_TCNT",   "DMA_STATUS", "DMA_2DSET",
-    "10",          "11",          "12",         "13",         "14",
-    "15",          "16",          "17",         "18",         "19",
-    "20",          "21",          "22",         "23",         "24",
-    "DMA_2DSCTL"
-  },
-  {
-    "PFMC0", "PFMC1", "PFMC2", "3", "PFM_CTL"
-  }
-};
-
-/* System register.  */
-/* Major Minor Extension.  */
-static const char *sr_map[8][16][8] =
-{
-  {
-    {"CPU_VER", "CORE_ID"},
-    {"ICM_CFG"},
-    {"DCM_CFG"},
-    {"MMU_CFG"},
-    {"MSC_CFG"}
-  },
-  {
-    {"PSW", "IPSW", "P_IPSW"},
-    {"0", "IVB", "INT_CTRL"},
-    {"0", "EVA", "P_EVA"},
-    {"0", "ITYPE", "P_ITYPE"},
-    {"0", "MERR"},
-    {"0", "IPC", "P_IPC", "OIPC"},
-    {"0", "1", "P_P0"},
-    {"0", "1", "P_P1"},
-    {"INT_MASK", "INT_MASK2"},
-    {"INT_PEND", "INT_PEND2", "2", "3", "INT_TRIGGER"},
-    {"SP_USR", "SP_PRIV"},
-    {"INT_PRI", "INT_PRI2"}
-  },
-  {
-    {"MMU_CTL"},
-    {"L1_PPTB"},
-    {"TLB_VPN"},
-    {"TLB_DATA"},
-    {"TLB_MISC"},
-    {"VLPT_IDX"},
-    {"ILMB"},
-    {"DLMB"},
-    {"CACHE_CTL"},
-    {"HSMP_SADDR", "HSMP_EADDR"},
-    {"0"},
-    {"0"},
-    {"0"},
-    {"0"},
-    {"0"},
-    {"SDZ_CTL", "MISC_CTL"}
-  },
-  {
-    {"BPC0", "BPC1", "BPC2", "BPC3", "BPC4", "BPC5", "BPC6", "BPC7"},
-    {"BPA0", "BPA1", "BPA2", "BPA3", "BPA4", "BPA5", "BPA6", "BPA7"},
-    {"BPAM0", "BPAM1", "BPAM2", "BPAM3", "BPAM4", "BPAM5", "BPAM6", "BPAM7"},
-    {"BPV0", "BPV1", "BPV2", "BPV3", "BPV4", "BPV5", "BPV6", "BPV7"},
-    {"BPCID0", "BPCID1", "BPCID2", "BPCID3", "BPCID4", "BPCID5", "BPCID6", "BPCID7"},
-    {"EDM_CFG"},
-    {"EDMSW"},
-    {"EDM_CTL"},
-    {"EDM_DTR"},
-    {"BPMTC"},
-    {"DIMBR"},
-    {"EDM_PROBE"},
-    {"0"},
-    {"0"},
-    {"TECR0", "TECR1"}
-  },
-  {
-    {"PFMC0", "PFMC1", "PFMC2"},
-    {"PFM_CTL"},
-    {"0"},
-    {"0"},
-    {"PRUSR_ACC_CTL"},
-    {"FUCOP_CTL"}
-  },
-  {
-    {"DMA_CFG"},
-    {"DMA_GCSW"},
-    {"DMA_CHNSEL"},
-    {"DMA_ACT"},
-    {"DMA_SETUP"},
-    {"DMA_ISADDR"},
-    {"DMA_ESADDR"},
-    {"DMA_TCNT"},
-    {"DMA_STATUS"},
-    {"DMA_2DSET", "DMA_2DSCTL"}
-  }
-};
-
-static void
-print_insn16 (bfd_vma pc, disassemble_info *info, uint32_t insn)
-{
-  static char r4map[] =
+  if (!reg)
+    return NULL;
+  while (reg->name != NULL && reg->value != value)
     {
-      0, 1, 2, 3, 4, 5, 6, 7,
-      8, 9, 10, 11, 16, 17, 18, 19
-    };
-  const int rt5 = __GF (insn, 5, 5);
-  const int ra5 = __GF (insn, 0, 5);
-  const int rt4 = r4map[__GF (insn, 5, 4)];
-  const int imm5u = IMMU (insn, 5);
-  const int imm9u = IMMU (insn, 9);
-  const int rt3 = __GF (insn, 6, 3);
-  const int ra3 = __GF (insn, 3, 3);
-  const int rb3 = __GF (insn, 0, 3);
-  const int rt38 = __GF (insn, 8, 3);
-  const int imm3u = rb3;
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  static const char *mnemonic_96[] =
-  {
-    "0x1",        "0x1",       "0x2",     "0x3",
-    "add45",      "sub45",     "addi45",  "subi45",
-    "srai45",     "srli45",    "slli333", "0xb",
-    "add333",     "sub333",    "addi333", "subi333",
-    "lwi333",     "lwi333.bi", "lhi333",  "lbi333",
-    "swi333",     "swi333.bi", "shi333",  "sbi333",
-    "addri36.sp", "lwi45.fe",  "lwi450",  "swi450",
-    "0x1c",       "0x1d",      "0x1e",    "0x1f",
-    "0x20",       "0x21",      "0x22",    "0x23",
-    "0x24",       "0x25",      "0x26",    "0x27",
-    "0x28",       "0x29",      "0x2a",    "0x2b",
-    "0x2c",       "0x2d",      "0x2e",    "0x2f",
-    "slts45",     "slt45",     "sltsi45", "slti45",
-    "0x34",       "0x35",      "0x36",    "0x37",
-    "0x38",       "0x39",      "0x3a",    "0x3b",
-    "ifcall9",    "movpi45"
-  };
-
-  static const char *mnemonic_misc33[] =
-  {
-    "misc33_0", "misc33_1", "neg33", "not33", "mul33", "xor33", "and33", "or33",
-  };
-
-  static const char *mnemonic_0xb[] =
-  {
-    "zeb33", "zeh33", "seb33", "seh33", "xlsb33", "x11b33", "bmski33", "fexti33"
-  };
-
-  static const char *mnemonic_bnes38[] =
-  {
-    "jr5", "jral5", "ex9.it", "?", "ret5", "add5.pc"
-  };
-
-  switch (__GF (insn, 7, 8))
-    {
-    case 0xf8:			/* push25 */
-    case 0xf9:			/* pop25 */
-      {
-	uint32_t res[] = { 6, 8, 10, 14 };
-	uint32_t re = res[__GF (insn, 5, 2)];
-
-	func (stream, "%s\t%s, %d", (insn & __BIT (7)) ? "pop25" : "push25",
-	      gpr_map[re], imm5u << 3);
-      }
-      return;
+      reg++;
     }
-
-  if (__GF (insn, 8, 7) == 0x7d)	/* movd44 */
-    {
-      int rt5e = __GF (insn, 4, 4) << 1;
-      int ra5e = IMMU (insn, 4) << 1;
-
-      func (stream, "movd44\t%s, %d", gpr_map[rt5e], ra5e);
-      return;
-    }
-
-  switch (__GF (insn, 9, 6))
-    {
-    case 0x4:			/* add45 */
-    case 0x5:			/* sub45 */
-    case 0x30:			/* slts45 */
-    case 0x31:			/* slt45 */
-      func (stream, "%s\t%s, %s", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt4], gpr_map[ra5]);
-      return;
-    case 0x6:			/* addi45 */
-    case 0x7:			/* subi45 */
-    case 0x8:			/* srai45 */
-    case 0x9:			/* srli45 */
-    case 0x32:			/* sltsi45 */
-    case 0x33:			/* slti45 */
-      func (stream, "%s\t%s, %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt4], ra5);
-      return;
-    case 0xc:			/* add333 */
-    case 0xd:			/* sub333 */
-      func (stream, "%s\t%s, %s, %s", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], gpr_map[rb3]);
-      return;
-    case 0xa:			/* slli333 */
-    case 0xe:			/* addi333 */
-    case 0xf:			/* subi333 */
-      func (stream, "%s\t%s, %s, %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], imm3u);
-      return;
-    case 0x10:			/* lwi333 */
-    case 0x14:			/* swi333 */
-      func (stream, "%s\t%s, [%s + %d]", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], imm3u << 2);
-      return;
-    case 0x12:			/* lhi333 */
-    case 0x16:			/* shi333 */
-      func (stream, "%s\t%s, [%s + %d]", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], imm3u << 1);
-      return;
-    case 0x13:			/* lbi333 */
-    case 0x17:			/* sbi333 */
-      func (stream, "%s\t%s, [%s + %d]", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], imm3u);
-      return;
-    case 0x11:			/* lwi333.bi */
-    case 0x15:			/* swi333.bi */
-      func (stream, "%s\t%s, [%s], %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], gpr_map[ra3], imm3u << 2);
-      return;
-    case 0x18:			/* addri36.sp */
-      func (stream, "%s\t%s, %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt3], IMMU (insn, 6) << 2);
-      return;
-    case 0x19:			/* lwi45.fe */
-      func (stream, "%s\t%s, %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt4], -((32 - imm5u) << 2));
-      return;
-    case 0x1a:			/* lwi450 */
-    case 0x1b:			/* swi450 */
-      func (stream, "%s\t%s, [%s]", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt4], gpr_map[ra5]);
-      return;
-    case 0x34:			/* beqzs8, bnezs8 */
-      func (stream, "%s\t", ((insn & __BIT (8)) ? "bnezs8" : "beqzs8"));
-      info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-      return;
-    case 0x35:			/* break16, ex9.it */
-      /* FIXME: Check bfd_mach.  */
-      if (imm9u < 32)		/* break16 */
-        func (stream, "break16\t%d", imm9u);
-      else
-        func (stream, "ex9.it\t%d", imm9u);
-      return;
-    case 0x3c:			/* ifcall9 */
-      func (stream, "%s\t", mnemonic_96[__GF (insn, 9, 6)]);
-      info->print_address_func ((IMMU (insn, 9) << 1) + pc, info);
-      return;
-    case 0x3d:			/* movpi45 */
-      func (stream, "%s\t%s, %d", mnemonic_96[__GF (insn, 9, 6)],
-	    gpr_map[rt4], ra5 + 16);
-      return;
-    case 0x3f:			/* MISC33 */
-      func (stream, "%s\t%s, %s", mnemonic_misc33[rb3],
-	    gpr_map[rt3], gpr_map[ra3]);
-      return;
-    case 0xb:			/* ...  */
-      func (stream, "%s\t%s, %s", mnemonic_0xb[rb3],
-	   gpr_map[rt3], gpr_map[ra3]);
-      return;
-    }
-
-  switch (__GF (insn, 10, 5))
-    {
-    case 0x0:			/* mov55 or ifret16 */
-      /* FIXME: Check bfd_mach.  */
-      if (rt5 == ra5 && rt5 == 31)
-        func (stream, "ifret16");
-      else
-        func (stream, "mov55\t%s, %s", gpr_map[rt5], gpr_map[ra5]);
-      return;
-    case 0x1:			/* movi55 */
-      func (stream, "movi55\t%s, %d", gpr_map[rt5], IMMS (insn, 5));
-      return;
-    case 0x1b:			/* addi10s (V2) */
-      func (stream, "addi10s\t%d", IMMS (insn, 10));
-      return;
-    }
-
-  switch (__GF (insn, 11, 4))
-    {
-    case 0x7:			/* lwi37.fp/swi37.fp */
-      func (stream, "%s\t%s, [$fp + 0x%x]",
-	    ((insn & __BIT (7)) ? "swi37" : "lwi37"),
-	    gpr_map[rt38], IMMU (insn, 7) << 2);
-      return;
-    case 0x8:			/* beqz38 */
-    case 0x9:			/* bnez38 */
-      func (stream, "%s\t%s, ",
-	    ((__GF (insn, 11, 4) & 1) ? "bnez38" : "beqz38"), gpr_map[rt38]);
-      info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-      return;
-    case 0xa:			/* beqs38/j8, implied r5 */
-      if (rt38 == 5)
-	{
-	  func (stream, "j8\t");
-	  info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-	}
-     else
-	{
-	  func (stream, "beqs38\t%s, ", gpr_map[rt38]);
-	  info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-	}
-      return;
-    case 0xb:			/* bnes38 and others */
-      if (rt38 == 5)
-	{
-	  switch (__GF (insn, 5, 3))
-	    {
-	    case 0:		/* jr5 */
-	    case 1:		/* jral5 */
-	    case 4:		/* ret5 */
-	      func (stream, "%s\t%s", mnemonic_bnes38[__GF (insn, 5, 3)],
-		    gpr_map[ra5]);
-	      return;
-	    case 2:		/* ex9.it imm5 */
-	    case 5:		/* add5.pc */
-	      func (stream, "%s\t%d", mnemonic_bnes38[__GF (insn, 5, 3)], ra5);
-	      return;
-	    default:
-	      func (stream, UNKNOWN_INSN_MSG);
-	      return;
-	    }
-	}
-      else
-	{
-	  func (stream, "bnes38\t%s", gpr_map[rt3]);
-	  info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-	}
-      return;
-    case 0xe:			/* lwi37/swi37 */
-      func (stream, "%s\t%s, [+ 0x%x]",
-	    ((insn & __BIT (7)) ? "swi37.sp" : "lwi37.sp"),
-	    gpr_map[rt38], IMMU (insn, 7) << 2);
-      return;
-    }
+  if (reg->name == NULL)
+    return NULL;
+  return reg;
 }
-
-
 static void
-print_insn32_mem (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info,
-		  uint32_t insn)
+nds32_parse_audio_ext (const field_t *pfd,
+         disassemble_info *info, uint32_t insn)
 {
-  const int rt = RT5 (insn);
-  const int ra = RA5 (insn);
-  const int rb = RB5 (insn);
-  const int sv = __GF (insn, 8, 2);
-  const int op = insn & 0xFF;
   fprintf_ftype func = info->fprintf_func;
   void *stream = info->stream;
-
-  switch (op)
+  keyword_t *psys_reg;
+  int int_value, new_value;
+  if (pfd->hw_res == HW_INT || pfd->hw_res == HW_UINT)
     {
-    case 0x0:			/* lb */
-    case 0x1:			/* lh */
-    case 0x2:			/* lw */
-    case 0x3:			/* ld */
-    case 0x8:			/* sb */
-    case 0x9:			/* sh */
-    case 0xa:			/* sw */
-    case 0xb:			/* sd */
-    case 0x10:			/* lbs */
-    case 0x11:			/* lhs */
-    case 0x12:			/* lws */
-    case 0x18:			/* llw */
-    case 0x19:			/* scw */
-    case 0x20:			/* lbup */
-    case 0x22:			/* lwup */
-    case 0x28:			/* sbup */
-    case 0x2a:			/* swup */
-      func (stream, "%s\t%s, [%s + (%s << %d)]",
-	    mnemonic_mem[op], gpr_map[rt], gpr_map[ra], gpr_map[rb], sv);
-      break;
-    case 0x4:			/* lb.bi */
-    case 0x5:			/* lh.bi */
-    case 0x6:			/* lw.bi */
-    case 0x7:			/* ld.bi */
-    case 0xc:			/* sb.bi */
-    case 0xd:			/* sh.bi */
-    case 0xe:			/* sw.bi */
-    case 0xf:			/* sd.bi */
-    case 0x14:			/* lbs.bi */
-    case 0x15:			/* lhs.bi */
-    case 0x16:			/* lws.bi */
-      func (stream, "%s\t%s, [%s], (%s << %d)",
-	    mnemonic_mem[op], gpr_map[rt], gpr_map[ra], gpr_map[rb], sv);
-      break;
-    case 0x13:			/* dpref */
-      {
-	const char *subtype = "???";
-
-	if ((rt & 0xf) < ARRAY_SIZE (keyword_dpref))
-	  subtype = keyword_dpref[rt & 0xf];
-
-	func (stream, "%s\t%s, [%s + (%s << %d)]",
-	      "dpref", subtype, gpr_map[ra], gpr_map[rb], sv);
-      }
-      break;
-    default:
+      if (pfd->hw_res == HW_INT)
+ int_value =
+   N32_IMMS ((insn >> pfd->bitpos), pfd->bitsize) << pfd->shift;
+      else
+ int_value = __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+      if (int_value < 0)
+ func (stream, "#%d", int_value);
+      else
+ func (stream, "#0x%x", int_value);
+      return;
+    }
+  int_value =
+    __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+  new_value = int_value;
+  psys_reg = (keyword_t*) keywords[pfd->hw_res];
+  if (strcmp (pfd->name, "im5_i") == 0)
+    {
+      new_value = int_value & 0x03;
+      new_value |= ((int_value & 0x10) >> 2);
+    }
+  else if (strcmp (pfd->name, "im5_m") == 0)
+    {
+      new_value = ((int_value & 0x1C) >> 2);
+    }
+  else if (strcmp (pfd->name, "im6_iq") == 0)
+    {
+      new_value |= 0x04;
+    }
+  else if (strcmp (pfd->name, "im6_ms") == 0)
+    {
+      new_value |= 0x04;
+    }
+  else if (strcmp (pfd->name, "a_rt21") == 0)
+    {
+      new_value = (insn & 0x00000020) >> 5;
+      new_value |= (insn & 0x00000C00) >> 9;
+      new_value |= (insn & 0x00008000) >> 12;
+    }
+  else if (strcmp (pfd->name, "a_rte") == 0)
+    {
+      new_value = (insn & 0x00000C00) >> 9;
+      new_value |= (insn & 0x00008000) >> 12;
+    }
+  else if (strcmp (pfd->name, "a_rte1") == 0)
+    {
+      new_value = (insn & 0x00000C00) >> 9;
+      new_value |= (insn & 0x00008000) >> 12;
+      new_value |= 0x01;
+    }
+  else if (strcmp (pfd->name, "a_rte69") == 0)
+    {
+      new_value = int_value << 1;
+    }
+  else if (strcmp (pfd->name, "a_rte69_1") == 0)
+    {
+      new_value = int_value << 1;
+      new_value |= 0x01;
+    }
+  psys_reg = nds32_find_reg_keyword (psys_reg, new_value);
+  if (!psys_reg)
+    func (stream, "???");
+  else
+    func (stream, "$%s", psys_reg->name);
+}
+static field_t *
+match_field (char *name)
+{
+  field_t *pfd;
+  int k;
+  for (k = 0; k < NDS32_CORE_COUNT; k++)
+    {
+      pfd = (field_t *) nds32_field_table[k];
+      while (1)
+ {
+   if (pfd->name == NULL)
+     break;
+   if (strcmp (name, pfd->name) == 0)
+     return pfd;
+   pfd++;
+ }
+    }
+  return NULL;
+}
+static void
+nds32_parse_opcode (struct nds32_opcode *opc, bfd_vma pc ATTRIBUTE_UNUSED,
+      disassemble_info *info, uint32_t insn, uint32_t parse_mode)
+{
+  int op = 0;
+  fprintf_ftype func = info->fprintf_func;
+  void *stream = info->stream;
+  const char *pstr_src;
+  char *pstr_tmp;
+  char tmp_string[16];
+  unsigned int push25gpr = 0, lsmwRb, lsmwRe, lsmwEnb4, checkbit, i;
+  int int_value, ifthe1st = 1;
+  const field_t *pfd;
+  keyword_t *psys_reg;
+  if (opc == NULL)
+    {
       func (stream, UNKNOWN_INSN_MSG);
       return;
     }
-}
-
-static void
-print_insn32_alu1 (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info, uint32_t insn)
-{
-  int op = insn & 0x1f;
-  const int rt = RT5 (insn);
-  const int ra = RA5 (insn);
-  const int rb = RB5 (insn);
-  const int rd = RD5 (insn);
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  switch (op)
+  pstr_src = opc->instruction;
+  if (*pstr_src == 0)
     {
-    case 0x0:			/* add, add_slli */
-    case 0x1:			/* sub, sub_slli */
-    case 0x2:			/* and, add_slli */
-    case 0x3:			/* xor, xor_slli */
-    case 0x4:			/* or, or_slli */
-      if (rd != 0)
-	{
-	  func (stream, "%s_slli\t%s, %s, %s, #%d",
-	        mnemonic_alu1[op], gpr_map[rt], gpr_map[ra], gpr_map[rb], rd);
-	}
-      else
-	{
-	  func (stream, "%s\t%s, %s, %s",
-	        mnemonic_alu1[op], gpr_map[rt], gpr_map[ra], gpr_map[rb]);
-	}
-      return;
-    case 0x1c:			/* add_srli */
-    case 0x1d:			/* sub_srli */
-    case 0x1e:			/* and_srli */
-    case 0x1f:			/* xor_srli */
-    case 0x15:			/* or_srli */
-      func (stream, "%s\t%s, %s, %s, #%d",
-	    mnemonic_alu1[op], gpr_map[rt], gpr_map[ra], gpr_map[rb], rd);
-      return;
-    case 0x5:			/* nor */
-    case 0x6:			/* slt */
-    case 0x7:			/* slts */
-    case 0xc:			/* sll */
-    case 0xd:			/* srl */
-    case 0xe:			/* sra */
-    case 0xf:			/* rotr */
-    case 0x12:			/* bitc */
-    case 0x18:			/* sva */
-    case 0x19:			/* svs */
-    case 0x1a:			/* cmovz */
-    case 0x1b:			/* cmovn */
-      func (stream, "%s\t%s, %s, %s",
-	    mnemonic_alu1[op], gpr_map[rt], gpr_map[ra], gpr_map[rb]);
-      return;
-    case 0x9:			/* srli */
-      if (ra ==0 && rb == 0 && rb==0)
-	{
-	  func (stream, "nop");
-	  return;
-	}
-    case 0x8:			/* slli */
-    case 0xa:			/* srai */
-    case 0xb:			/* rotri */
-      func (stream, "%s\t%s, %s, #%d",
-	    mnemonic_alu1[op], gpr_map[rt], gpr_map[ra], rb);
-      return;
-    case 0x10:			/* seb */
-    case 0x11:			/* seh */
-    case 0x13:			/* zeh */
-    case 0x14:			/* wsbh */
-      func (stream, "%s\t%s, %s",
-	    mnemonic_alu1[op], gpr_map[rt], gpr_map[ra]);
-      return;
-    case 0x16:			/* divsr */
-    case 0x17:			/* divr */
-      func (stream, "%s\t%s, %s, %s, %s",
-	    mnemonic_alu1[op], gpr_map[rt], gpr_map[rd], gpr_map[ra], gpr_map[rb]);
-      return;
-    default:
-      func (stream, UNKNOWN_INSN_MSG);
+      func (stream, "%s", opc->opcode);
       return;
     }
-
+  if (parse_mode & NDS32_PARSE_INSN16)
+    {
+      func (stream, "%s ", opc->opcode);
+    }
+  else
+    {
+      op = N32_OP6 (insn);
+      if (op == N32_OP6_LSMW)
+ func (stream, "%s.", opc->opcode);
+      else if (strstr (opc->instruction, "tito"))
+ func (stream, "%s", opc->opcode);
+      else
+ func (stream, "%s ", opc->opcode);
+    }
+  while (*pstr_src)
+    {
+      switch (*pstr_src)
+ {
+ case '%':
+ case '=':
+ case '&':
+   pstr_src++;
+   pstr_tmp = &tmp_string[0];
+   while (*pstr_src)
+     {
+       if ((*pstr_src == ',') || (*pstr_src == ' ')
+    || (*pstr_src == '{') || (*pstr_src == '}')
+    || (*pstr_src == '[') || (*pstr_src == ']')
+    || (*pstr_src == '(') || (*pstr_src == ')')
+    || (*pstr_src == '+') || (*pstr_src == '<'))
+  break;
+       *pstr_tmp++ = *pstr_src++;
+     }
+   *pstr_tmp = 0;
+          if ((pfd = match_field (&tmp_string[0])) == NULL)
+            return;
+   if (parse_mode & NDS32_PARSE_INSN16)
+     {
+       if (pfd->hw_res == HW_GPR)
+  {
+    int_value =
+      __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+    if ((opc->value == 0xfc00) || (opc->value == 0xfc80))
+      {
+        if (int_value == 0)
+   int_value = 6;
+        else
+   int_value = (6 + (0x01 << int_value));
+        push25gpr = int_value;
+      }
+    else if (strcmp (pfd->name, "rt4") == 0)
+      {
+        int_value = nds32_r45map[int_value];
+      }
+    func (stream, "$%s", keyword_gpr[int_value].name);
+  }
+       else if ((pfd->hw_res == HW_INT) || (pfd->hw_res == HW_UINT))
+  {
+    if (pfd->hw_res == HW_INT)
+      int_value =
+        N32_IMMS ((insn >> pfd->bitpos),
+    pfd->bitsize) << pfd->shift;
+    else
+      int_value =
+        __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+    if (opc->value == 0xfa00)
+      {
+        int_value += 16;
+        func (stream, "#0x%x", int_value);
+      }
+    else if (opc->value == 0xb200)
+      {
+        int_value = 0 - (128 - int_value);
+        func (stream, "#%d", int_value);
+      }
+    else if ((opc->value == 0xc000) || (opc->value == 0xc800)
+      || (opc->value == 0xd000) || (opc->value == 0xd800)
+      || (opc->value == 0xd500) || (opc->value == 0xe800)
+      || (opc->value == 0xe900))
+      {
+        info->print_address_func (int_value + pc, info);
+      }
+    else if ((opc->value == 0xfc00) || (opc->value == 0xfc80))
+      {
+        func (stream, "#%d    ! {$r6", int_value);
+        if (push25gpr != 6)
+   func (stream, "~$%s", keyword_gpr[push25gpr].name);
+        func (stream, ", $fp, $gp, $lp}");
+      }
+    else if (pfd->hw_res == HW_INT)
+      {
+        if (int_value < 0)
+   func (stream, "#%d", int_value);
+        else
+   func (stream, "#0x%x", int_value);
+      }
+    else
+      func (stream, "#0x%x", int_value);
+  }
+     }
+   else if (op == N32_OP6_AEXT)
+     {
+       nds32_parse_audio_ext (pfd, info, insn);
+     }
+   else if (pfd->hw_res < HW_INT)
+     {
+       int_value =
+  __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+       psys_reg = *(nds32_keyword_table[pfd->hw_res >> 8]
+      + (pfd->hw_res & 0xff));
+       psys_reg = nds32_find_reg_keyword (psys_reg, int_value);
+       if (!psys_reg && pfd->hw_res == HW_SR)
+  func (stream, "%d", int_value);
+       else if (!psys_reg)
+  func (stream, "???");
+       else
+  {
+    if (pfd->hw_res == HW_GPR || pfd->hw_res == HW_CPR
+        || pfd->hw_res == HW_FDR || pfd->hw_res == HW_FSR
+        || pfd->hw_res == HW_DXR || pfd->hw_res == HW_SR
+        || pfd->hw_res == HW_USR)
+      func (stream, "$%s", psys_reg->name);
+    else if (pfd->hw_res == HW_DTITON
+      || pfd->hw_res == HW_DTITOFF)
+      func (stream, ".%s", psys_reg->name);
+    else
+      func (stream, "%s", psys_reg->name);
+  }
+     }
+   else if ((pfd->hw_res == HW_INT) || (pfd->hw_res == HW_UINT))
+     {
+       if (pfd->hw_res == HW_INT)
+  int_value =
+    N32_IMMS ((insn >> pfd->bitpos), pfd->bitsize) << pfd->shift;
+       else
+  int_value =
+    __GF (insn, pfd->bitpos, pfd->bitsize) << pfd->shift;
+       if ((op == N32_OP6_BR1) || (op == N32_OP6_BR2))
+  {
+    info->print_address_func (int_value + pc, info);
+  }
+       else if ((op == N32_OP6_BR3) && (pfd->bitpos == 0))
+  {
+    info->print_address_func (int_value + pc, info);
+  }
+       else if (op == N32_OP6_JI)
+  {
+    if (info->flags & INSN_HAS_RELOC)
+      pc = 0;
+    info->print_address_func (int_value + pc, info);
+  }
+       else if (op == N32_OP6_LSMW)
+  {
+    func (stream, "#0x%x    ! {", int_value);
+    lsmwEnb4 = int_value;
+    lsmwRb = ((insn >> 20) & 0x1F);
+    lsmwRe = ((insn >> 10) & 0x1F);
+    if (lsmwRb != 31 || lsmwRe != 31)
+      {
+        func (stream, "$%s", keyword_gpr[lsmwRb].name);
+        if (lsmwRb != lsmwRe)
+   func (stream, "~$%s", keyword_gpr[lsmwRe].name);
+        ifthe1st = 0;
+      }
+    if (lsmwEnb4 != 0)
+      {
+        checkbit = 0x08;
+        for (i = 0; i < 4; i++)
+   {
+     if (lsmwEnb4 & checkbit)
+       {
+         if (ifthe1st == 1)
+    {
+      ifthe1st = 0;
+      func (stream, "$%s", keyword_gpr[28 + i].name);
+    }
+         else
+    func (stream, ", $%s", keyword_gpr[28 + i].name);
+       }
+     checkbit >>= 1;
+   }
+      }
+    func (stream, "}");
+  }
+       else if (pfd->hw_res == HW_INT)
+  {
+    if (int_value < 0)
+      func (stream, "#%d", int_value);
+    else
+      func (stream, "#0x%x", int_value);
+  }
+       else
+  {
+    func (stream, "#0x%x", int_value);
+  }
+     }
+   break;
+ case '{':
+ case '}':
+   pstr_src++;
+   break;
+ default:
+   func (stream, "%c", *pstr_src++);
+   break;
+ }
+    }
   return;
 }
-
 static void
-print_insn32_alu2 (bfd_vma pc ATTRIBUTE_UNUSED,
-		   disassemble_info *info,
-		   uint32_t insn)
+nds32_filter_unknown_insn (uint32_t insn, struct nds32_opcode **opc)
 {
-  int op = insn & 0x3ff;
-  const int rt = RT5 (insn);
-  const int ra = RA5 (insn);
-  const int rb = RB5 (insn);
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  if ((insn & 0x7f) == 0x4e)	/* ffbi */
+  if (!(*opc))
+    return;
+  switch ((*opc)->value)
     {
-      func (stream, "ffbi\t%s, %s, #0x%x",
-	    gpr_map[rt], gpr_map[ra], __GF (insn, 7, 8));
-      return;
+    case JREG (JR):
+    case JREG (JRNEZ):
+      if (__GF (insn, 6, 2) != 0 || __GF (insn, 15, 10) != 0)
+        *opc = NULL;
+      break;
+    case MISC (STANDBY):
+      if (__GF (insn, 7, 18) != 0)
+        *opc = NULL;
+      break;
+    case SIMD (PBSAD):
+    case SIMD (PBSADA):
+      if (__GF (insn, 5, 5) != 0)
+        *opc = NULL;
+      break;
+    case BR2 (SOP0):
+      if (__GF (insn, 20, 5) != 0)
+        *opc = NULL;
+      break;
+    case JREG (JRAL):
+      if (__GF (insn, 5, 3) != 0 || __GF (insn, 15, 5) != 0)
+        *opc = NULL;
+      break;
+    case ALU1 (NOR):
+    case ALU1 (SLT):
+    case ALU1 (SLTS):
+    case ALU1 (SLLI):
+    case ALU1 (SRLI):
+    case ALU1 (SRAI):
+    case ALU1 (ROTRI):
+    case ALU1 (SLL):
+    case ALU1 (SRL):
+    case ALU1 (SRA):
+    case ALU1 (ROTR):
+    case ALU1 (SEB):
+    case ALU1 (SEH):
+    case ALU1 (ZEH):
+    case ALU1 (WSBH):
+    case ALU1 (SVA):
+    case ALU1 (SVS):
+    case ALU1 (CMOVZ):
+    case ALU1 (CMOVN):
+      if (__GF (insn, 5, 5) != 0)
+        *opc = NULL;
+      break;
+    case MISC (IRET):
+    case MISC (ISB):
+    case MISC (DSB):
+      if (__GF (insn, 5, 20) != 0)
+        *opc = NULL;
+      break;
     }
-
-  switch (op)
+}
+static void
+print_insn32 (bfd_vma pc, disassemble_info *info, uint32_t insn,
+       uint32_t parse_mode)
+{
+  struct nds32_opcode *opc;
+  uint32_t opcode = nds32_mask_opcode (insn);
+  opc = (struct nds32_opcode *) htab_find (opcode_htab, &opcode);
+  nds32_special_opcode (insn, &opc);
+  nds32_filter_unknown_insn (insn, &opc);
+  nds32_parse_opcode (opc, pc, info, insn, parse_mode);
+}
+static void
+print_insn16 (bfd_vma pc, disassemble_info *info,
+       uint32_t insn, uint32_t parse_mode)
+{
+  struct nds32_opcode *opc;
+  uint32_t opcode;
+  unsigned int mask = 0xfe00;
+  switch (__GF (insn, 13, 2))
     {
-    case 0x0:			/* max */
-    case 0x1:			/* min */
-    case 0x2:			/* ave */
-    case 0xc:			/* bse */
-    case 0xd:			/* bsp */
-    case 0xe:			/* ffb */
-    case 0xf:			/* ffmism */
-    case 0x17:			/* ffzmism */
-    case 0x24:			/* mul */
-      func (stream, "%s\t%s, %s, %s", mnemonic_alu20[op],
-	    gpr_map[rt], gpr_map[ra], gpr_map[rb]);
-      return;
-
-    case 0x3:			/* abs */
-    case 0x6:			/* clo */
-    case 0x7:			/* clz */
-      func (stream, "%s\t%s, %s", mnemonic_alu20[op], gpr_map[rt], gpr_map[ra]);
-      return;
-
-    case 0x4:			/* clips */
-    case 0x5:			/* clip */
-    case 0x8:			/* bset */
-    case 0x9:			/* bclr */
-    case 0xa:			/* btgl */
-    case 0xb:			/* btst */
-      func (stream, "%s\t%s, %s, #%d", mnemonic_alu20[op],
-	    gpr_map[rt], gpr_map[ra], IMM1U (insn));
-      return;
-
-    case 0x20:			/* mfusr */
-    case 0x21:			/* mtusr */
-      func (stream, "%s\t%s, $%s", mnemonic_alu20[op],
-	    gpr_map[rt], usr_map[__GF (insn, 10, 5)][__GF (insn, 15, 5)]);
-      return;
-    case 0x28:			/* mults64 */
-    case 0x29:			/* mult64 */
-    case 0x2a:			/* madds64 */
-    case 0x2b:			/* madd64 */
-    case 0x2c:			/* msubs64 */
-    case 0x2d:			/* msub64 */
-    case 0x2e:			/* divs */
-    case 0x2f:			/* div */
-    case 0x31:			/* mult32 */
-    case 0x33:			/* madd32 */
-    case 0x35:			/* msub32 */
-      func (stream, "%s\t$d%d, %s, %s", mnemonic_alu20[op],
-	    rt >> 1, gpr_map[ra], gpr_map[rb]);
-      return;
-
-    case 0x4f:			/* flmism */
-    case 0x68:			/* mulsr64 */
-    case 0x69:			/* mulr64 */
-    case 0x73:			/* maddr32 */
-    case 0x75:			/* msubr32 */
-      op = insn & 0x3f;
-      func (stream, "%s\t%s, %s, %s", mnemonic_alu21[op],
-	    gpr_map[rt], gpr_map[ra], gpr_map[rb]);
-      return;
+    case 0x0:
+      if (__GF (insn, 11, 2) == 0)
+ {
+   mask = 0xfc00;
+   if (__GF (insn, 0, 11) == 0x3ff)
+     mask = 0xffff;
+ }
+      else if (__GF (insn, 9, 4) == 0xb)
+ mask = 0xfe07;
+      break;
+    case 0x1:
+      if (__GF (insn, 11, 2) == 0x3)
+ mask = 0xf880;
+      break;
+    case 0x2:
+      mask = 0xf800;
+      if (__GF (insn, 12, 1) == 0x1
+   && __GF (insn, 8, 3) == 0x5)
+ {
+   if (__GF (insn, 11, 1) == 0x0)
+     mask = 0xff00;
+   else
+     mask = 0xffe0;
+ }
+      break;
+    case 0x3:
+      switch (__GF (insn, 11, 2))
+ {
+ case 0x1:
+   if (__GF (insn, 9, 2) == 0x0)
+     mask = 0xff00;
+   else if (__GF(insn, 10, 1) == 0x1)
+     mask = 0xfc00;
+   break;
+ case 0x2:
+   mask = 0xf880;
+   break;
+ case 0x3:
+   if (__GF (insn, 8, 3) == 0x5)
+     mask = 0xff00;
+   else if (__GF (insn, 8, 3) == 0x4)
+     mask = 0xff80;
+   else if (__GF (insn, 9 , 2) == 0x3)
+     mask = 0xfe07;
+   break;
+ }
+      break;
+    }
+  opcode = insn & mask;
+  opc = (struct nds32_opcode *) htab_find (opcode_htab, &opcode);
+  nds32_special_opcode (insn, &opc);
+  nds32_parse_opcode (opc, pc, info, insn, parse_mode);
+}
+static hashval_t
+htab_hash_hash (const void *p)
+{
+  return (*(unsigned int *) p) % 49;
+}
+static int
+htab_hash_eq (const void *p, const void *q)
+{
+  uint32_t pinsn = ((struct nds32_opcode *) p)->value;
+  uint32_t qinsn = *((uint32_t *) q);
+  return (pinsn == qinsn);
+}
+static uint32_t
+mask_CEXT (uint32_t insn)
+{
+  opcode_t *opc = nds32_opcode_table[NDS32_ACE], *max_opc = NULL;
+  for (; opc != NULL && opc->opcode != NULL; opc++)
+    {
+      if ((insn & opc->value) == opc->value
+   && (max_opc == NULL || opc->value > max_opc->value))
+   max_opc = opc;
+    }
+  return max_opc ? max_opc->value : insn;
+}
+static uint32_t
+nds32_mask_opcode (uint32_t insn)
+{
+  uint32_t opcode = N32_OP6 (insn);
+  switch (opcode)
+    {
+    case N32_OP6_LBI:
+    case N32_OP6_LHI:
+    case N32_OP6_LWI:
+    case N32_OP6_LDI:
+    case N32_OP6_LBI_BI:
+    case N32_OP6_LHI_BI:
+    case N32_OP6_LWI_BI:
+    case N32_OP6_LDI_BI:
+    case N32_OP6_SBI:
+    case N32_OP6_SHI:
+    case N32_OP6_SWI:
+    case N32_OP6_SDI:
+    case N32_OP6_SBI_BI:
+    case N32_OP6_SHI_BI:
+    case N32_OP6_SWI_BI:
+    case N32_OP6_SDI_BI:
+    case N32_OP6_LBSI:
+    case N32_OP6_LHSI:
+    case N32_OP6_LWSI:
+    case N32_OP6_LBSI_BI:
+    case N32_OP6_LHSI_BI:
+    case N32_OP6_LWSI_BI:
+    case N32_OP6_MOVI:
+    case N32_OP6_SETHI:
+    case N32_OP6_ADDI:
+    case N32_OP6_SUBRI:
+    case N32_OP6_ANDI:
+    case N32_OP6_XORI:
+    case N32_OP6_ORI:
+    case N32_OP6_SLTI:
+    case N32_OP6_SLTSI:
+    case N32_OP6_BITCI:
+      return MASK_OP (insn, 0);
+    case N32_OP6_CEXT:
+      return mask_CEXT (insn);
+    case N32_OP6_ALU2:
+      if (__GF (insn, 0, 7) == (N32_ALU2_FFBI | __BIT (6)))
+ return MASK_OP (insn, 0x7f);
+      else if (__GF (insn, 0, 10) == (N32_ALU2_MFUSR | __BIT (6))
+        || __GF (insn, 0, 10) == (N32_ALU2_MTUSR | __BIT (6)))
+ return MASK_OP (insn, 0xf81ff);
+      else if (__GF (insn, 0, 10) == (N32_ALU2_ONEOP | __BIT (7)))
+ {
+   if (__GF (insn, 12, 3) == 4)
+     return MASK_OP (insn, 0x73ff);
+   return MASK_OP (insn, 0x7fff);
+ }
+      return MASK_OP (insn, 0x3ff);
+    case N32_OP6_ALU1:
+    case N32_OP6_SIMD:
+      return MASK_OP (insn, 0x1f);
+    case N32_OP6_MEM:
+      return MASK_OP (insn, 0xff);
+    case N32_OP6_JREG:
+      return MASK_OP (insn, 0x7f);
+    case N32_OP6_LSMW:
+      return MASK_OP (insn, 0x23);
+    case N32_OP6_SBGP:
+    case N32_OP6_LBGP:
+      return MASK_OP (insn, 0x1 << 19);
+    case N32_OP6_HWGP:
+      if (__GF (insn, 18, 2) == 0x3)
+ return MASK_OP (insn, 0x7 << 17);
+      return MASK_OP (insn, 0x3 << 18);
+    case N32_OP6_DPREFI:
+      return MASK_OP (insn, 0x1 << 24);
+    case N32_OP6_LWC:
+    case N32_OP6_SWC:
+    case N32_OP6_LDC:
+    case N32_OP6_SDC:
+      return MASK_OP (insn, 0x1 << 12);
+    case N32_OP6_JI:
+      return MASK_OP (insn, 0x1 << 24);
+    case N32_OP6_BR1:
+      return MASK_OP (insn, 0x1 << 14);
+    case N32_OP6_BR2:
+      if (__GF (insn, 16, 4) == 0)
+ return MASK_OP (insn, 0x1ff << 16);
+      else
+ return MASK_OP (insn, 0xf << 16);
+    case N32_OP6_BR3:
+      return MASK_OP (insn, 0x1 << 19);
+    case N32_OP6_MISC:
+    switch (__GF (insn, 0, 5))
+    {
+    case N32_MISC_MTSR:
+      if (__GF (insn, 5, 5) == 0x1 || __GF (insn, 5, 5) == 0x2)
+ return MASK_OP (insn, 0x1fffff);
+      return MASK_OP (insn, 0x1f);
+    case N32_MISC_TLBOP:
+      if (__GF (insn, 5, 5) == 5 || __GF (insn, 5, 5) == 7)
+ return MASK_OP (insn, 0x3ff);
+      return MASK_OP (insn, 0x1f);
     default:
-      func (stream, UNKNOWN_INSN_MSG);
-      return;
+      return MASK_OP (insn, 0x1f);
     }
-}
-
-static void
-print_insn32_jreg (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info, uint32_t insn)
-{
-  int op = insn & 0xff;
-  const int rt = RT5 (insn);
-  const int rb = RB5 (insn);
-  const char *dtit_on[] = { "", ".iton", ".dton", ".ton" };
-  const char *dtit_off[] = { "", ".itoff", ".dtoff", ".toff" };
-  const char *mnemonic_jreg[] = { "jr", "jral", "jrnez", "jralnez" };
-  const char *mnemonic_ret[] = { "jr", "ret", NULL, "ifret" };
-  const int dtit = __GF (insn, 8, 2);
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  switch (op)
-    {
-    case 0:		/* jr */
-      func (stream, "%s%s\t%s", mnemonic_ret[op >> 5],
-	    dtit_on[dtit], gpr_map[rb]);
-      return;
-
-    case 0x20:		/* ret */
-      func (stream, "%s%s\t%s", mnemonic_ret[op >> 5],
-	    dtit_off[dtit], gpr_map[rb]);
-      return;
-    case 0x60:		/* ifret */
-      break;
-    case 1:		/* jral */
-    case 2:		/* jrnez */
-    case 3:		/* jralnez */
-      func (stream, "%s%s\t%s, %s", mnemonic_jreg[op],
-	    dtit_on[dtit], gpr_map[rt], gpr_map[rb]);
-      return;
-    default:		/* unknown */
-      func (stream, UNKNOWN_INSN_MSG);
-      break;
-    }
-}
-
-static void
-print_insn32_misc (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info,
-		   uint32_t insn)
-{
-  int op = insn & 0x1f;
-  int rt = RT5 (insn);
-  unsigned int id;
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  static const char *keyword_standby[] =
-    {
-      "no_wake_grant", "wake_grant", "wait_done",
-    };
-  static const char *keyword_tlbop[] =
-    {
-      "TRD", "TWR", "RWR", "RWLK", "UNLK", "PB", "INV", "FLUA"
-    };
-
-  switch (op)
-    {
-    case 0x0:			/* standby */
-      id = __GF (insn, 5, 20);
-      if (id < ARRAY_SIZE (keyword_standby))
-	func (stream, "standby\t%s", keyword_standby[id]);
-      else
-	func (stream, "standby\t%d", id);
-      return;
-    case 0x1:			/* cctl */
-      func (stream, "cctl\t!FIXME");
-      return;
-    case 0x8:			/* dsb */
-    case 0x9:			/* isb */
-    case 0xd:			/* isync */
-    case 0xc:			/* msync */
-    case 0x4:			/* iret */
-      func (stream, "%s", mnemonic_misc[op]);
-      return;
-    case 0x5:			/* trap */
-    case 0xa:			/* break */
-    case 0xb:			/* syscall */
-      id = __GF (insn, 5, 15);
-      func (stream, "%s\t%d", mnemonic_misc[op], id);
-      return;
-    case 0x2:			/* mfsr */
-    case 0x3:			/* mtsr */
-      /* FIXME: setend, setgie.  */
-      func (stream, "%s\t%s, $%s", mnemonic_misc[op], gpr_map[rt],
-	    sr_map[__GF(insn, 17, 3)][__GF(insn, 13, 4)][__GF(insn, 10, 3)]);
-      return;
-    case 0x6:			/* teqz */
-    case 0x7:			/* tnez */
-      id = __GF (insn, 5, 15);
-      func (stream, "%s\t%s, %d", mnemonic_misc[op], gpr_map[rt], id);
-      return;
-    case 0xe:			/* tlbop */
-      id = __GF (insn, 5, 5);
-      if (id < ARRAY_SIZE (keyword_tlbop))
-	func (stream, "tlbop\t%s", keyword_tlbop[id]);
-      else
-	func (stream, "tlbop\t%d", id);
-      return;
-    }
-}
-
-static void
-print_insn32_fpu (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info,
-		  uint32_t insn)
-{
-  int op = insn & 0xf;
-  int mask_sub_op = (insn & 0x3c0) >> 6;
-  int mask_bi = (insn & 0x80) >> 7;
-  int mask_cfg = (insn & 0x7c00) >> 10;
-  int mask_f2op = (insn & 0x7c00) >> 10;
-  int dp = 0;
-  int dp_insn = 0;
-  char wd = 's';
-  const int rt = RT5 (insn);
-  const int ra = RA5 (insn);
-  const int rb = RB5 (insn);
-  const int sv = __GF (insn, 8, 2);
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  switch (op)
-    {
-    case 0x0:			/* fs1 */
-    case 0x8:			/* fd1 */
-      dp = (op & 0x8) ? 1 : 0;
-      if (dp)
-	{
-	  wd = 'd';
-	  dp_insn = 14;
-	}
-      else
-	{
-	  wd = 's';
-	  dp_insn = 0;
-	}
-      switch (mask_sub_op)
-	{
-	case 0x0:
-	case 0x1:
-	case 0x2:
-	case 0x3:
-	case 0x4:
-	case 0x5:
-	case 0x8:
-	case 0x9:
-	case 0xc:
-	case 0xd:
-	  func (stream, "%s\t$f%c%d, $f%c%d, $f%c%d",
-		mnemonic_alu[mask_sub_op + dp_insn],
-		wd, rt, wd, ra, wd, rb);
-	  return;
-	case 0x6:
-	case 0x7:
-	  func (stream, "%s\t$f%c%d, $f%c%d, $fs%d",
-		mnemonic_alu[mask_sub_op + dp_insn],
-		wd, rt, wd, ra, rb);
-	  return;
-	case 0xf:
-	  if (dp)
-	    {
-	      wd = 'd';
-	      dp_insn = 0x1d;
-	    }
-	  else
-	    {
-	      wd = 's';
-	      dp_insn = 0;
-	    }
-
-	  switch (mask_f2op)
-	    {
-	    case 0x0:
-	      if (dp)
-		func (stream, "%s\t$fs%d, $fd%d",
-		      mnemonic_fpu_2op[mask_f2op + dp_insn], rt, ra);
-	      else
-		func (stream, "%s\t$fd%d, $fs%d",
-		      mnemonic_fpu_2op[mask_f2op + dp_insn], rt, ra);
-	      return;
-	    case 0x1:
-	    case 0x5:
-	      func (stream, "%s\t$f%c%d, $f%c%d",
-		    mnemonic_fpu_2op[mask_f2op + dp_insn], wd, rt, wd, ra);
-	      return;
-	    case 0x8:
-	    case 0xc:
-	      func (stream, "%s\t$f%c%d, $fs%d",
-		    mnemonic_fpu_2op[mask_f2op + dp_insn], wd, rt, ra);
-	      return;
-	    case 0x10:
-	    case 0x14:
-	    case 0x18:
-	    case 0x1c:
-	      func (stream, "%s\t$fs%d, $f%c%d",
-		    mnemonic_fpu_2op[mask_f2op + dp_insn], rt, wd, ra);
-	      return;
-	    }
-	}
-    case 0x1:			/* mfcp */
-      switch (mask_sub_op)
-	{
-	case 0x0:
-	  func (stream, "fmfsr\t%s, $fs%d", gpr_map[rt], ra);
-	  return;
-	case 0x1:
-	  func (stream, "fmfdr\t%s, $fd%d", gpr_map[rt], ra);
-	  return;
-	case 0xc:
-	  if (mask_cfg)
-	    func (stream, "fmfcsr\t%s", gpr_map[rt]);
-	  else
-	    func (stream, "fmfcfg\t%s", gpr_map[rt]);
-	  return;
-	}
-    case 0x2:			/* fls */
-      if (mask_bi)
-	func (stream, "fls.bi\t$fs%d, [%s], (%s << %d)",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      else
-	func (stream, "fls\t$fs%d, [%s + (%s << %d)]",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      return;
-    case 0x3:			/* fld */
-      if (mask_bi)
-	func (stream, "fld.bi\t$fd%d, [%s], (%s << %d)",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      else
-	func (stream, "fld\t$fd%d, [%s + (%s << %d)]",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      return;
-    case 0x4:			/* fs2 */
-      func (stream, "%s\t$fs%d, $fs%d, $fs%d",
-	    mnemonic_fs2_cmp[mask_sub_op], rt, ra, rb);
-      return;
-    case 0x9:			/* mtcp */
-      switch (mask_sub_op)
-	{
-	case 0x0:
-	  func (stream, "fmtsr\t%s, $fs%d", gpr_map[rt], ra);
-	  return;
-	case 0x1:
-	  func (stream, "fmtdr\t%s, $fd%d", gpr_map[rt], ra);
-	  return;
-	case 0xc:
-	    func (stream, "fmtcsr\t%s", gpr_map[rt]);
-	  return;
-	}
-    case 0xa:			/* fss */
-      if (mask_bi)
-	func (stream, "fss.bi\t$fs%d, [%s], (%s << %d)",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      else
-	func (stream, "fss\t$fs%d, [%s + (%s << %d)]",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      return;
-    case 0xb:			/* fsd */
-      if (mask_bi)
-	func (stream, "fsd.bi\t$fd%d, [%s], (%s << %d)",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      else
-	func (stream, "fsd\t$fd%d, [%s + (%s << %d)]",
-	      rt, gpr_map[ra], gpr_map[rb], sv);
-      return;
-    case 0xc:			/* fd2 */
-      func (stream, "%s\t$fs%d, $fd%d, $fd%d",
-	    mnemonic_fd2_cmp[mask_sub_op], rt, ra, rb);
-      return;
-    }
-}
-
-static void
-print_insn32 (bfd_vma pc, disassemble_info *info, uint32_t insn)
-{
-  int op = OP6 (insn);
-  const int rt = RT5 (insn);
-  const int ra = RA5 (insn);
-  const int rb = RB5 (insn);
-  const int imm15s = IMMS (insn, 15);
-  const int imm15u = IMMU (insn, 15);
-  uint32_t shift;
-  fprintf_ftype func = info->fprintf_func;
-  void *stream = info->stream;
-
-  switch (op)
-    {
-    case 0x0:			/* lbi */
-    case 0x1:			/* lhi */
-    case 0x2:			/* lwi */
-    case 0x3:			/* ldi */
-    case 0x8:			/* sbi */
-    case 0x9:			/* shi */
-    case 0xa:			/* swi */
-    case 0xb:			/* sdi */
-    case 0x10:			/* lbsi */
-    case 0x11:			/* lhsi */
-    case 0x12:			/* lwsi */
-      shift = op & 0x3;
-      func (stream, "%s\t%s, [%s + #%d]",
-	    mnemonic_op6[op], gpr_map[rt], gpr_map[ra], imm15s << shift);
-      return;
-    case 0x4:			/* lbi.bi */
-    case 0x5:			/* lhi.bi */
-    case 0x6:			/* lwi.bi */
-    case 0x7:			/* ldi.bi */
-    case 0xc:			/* sbi.bi */
-    case 0xd:			/* shi.bi */
-    case 0xe:			/* swi.bi */
-    case 0xf:			/* sdi.bi */
-    case 0x14:			/* lbsi.bi */
-    case 0x15:			/* lhsi.bi */
-    case 0x16:			/* lwsi.bi */
-      shift = op & 0x3;
-      func (stream, "%s\t%s, [%s], #%d",
-	    mnemonic_op6[op], gpr_map[rt], gpr_map[ra], imm15s << shift);
-      return;
-    case 0x13:			/* dprefi */
+    case N32_OP6_COP:
+    if (__GF (insn, 4, 2) == 0)
       {
-	const char *subtype = "???";
-	char wd = 'w';
-
-	shift = 2;
-
-	/* d-bit */
-	if (rt & 0x10)
-	  {
-	    wd = 'd';
-	    shift = 3;
-	  }
-
-	if ((rt & 0xf) < ARRAY_SIZE (keyword_dpref))
-	  subtype = keyword_dpref[rt & 0xf];
-
-	func (stream, "%s.%c\t%s, [%s + #%d]",
-	      mnemonic_op6[op], wd, subtype, gpr_map[ra], imm15s << shift);
+ switch (__GF (insn, 0, 4))
+   {
+   case 0x0:
+   case 0x8:
+     if (__GF (insn, 6, 4) == 0xf)
+       return MASK_OP (insn, 0x7fff);
+     return MASK_OP (insn, 0x3ff);
+   case 0x4:
+   case 0xc:
+     return MASK_OP (insn, 0x3ff);
+   case 0x1:
+   case 0x9:
+     if (__GF (insn, 6, 4) == 0xc)
+       return MASK_OP (insn, 0x7fff);
+     return MASK_OP (insn, 0x3ff);
+   default:
+     return MASK_OP (insn, 0xff);
+   }
       }
-      return;
-    case 0x17:			/* LBGP */
-      func (stream, "%s\t%s, [+ %d]",
-	    ((insn & __BIT (19)) ? "lbsi.gp" : "lbi.gp"),
-	    gpr_map[rt], IMMS (insn, 19));
-      return;
-    case 0x18:			/* LWC */
-    case 0x19:			/* SWC */
-    case 0x1a:			/* LDC */
-    case 0x1b:			/* SDC */
+    else if (__GF (insn, 0, 2) == 0)
+      return MASK_OP (insn, 0xf);
+    return MASK_OP (insn, 0xcf);
+    case N32_OP6_AEXT:
+    switch (__GF (insn, 23, 2))
+      {
+      case 0x0:
+ if (__GF (insn, 5, 4) == 0)
+   return MASK_OP (insn, (0x1f << 20) | 0x1ff);
+ else if (__GF (insn, 5, 4) == 1)
+   return MASK_OP (insn, (0x1f << 20) | (0xf << 5));
+ else if (__GF (insn, 20, 3) == 0 && __GF (insn, 6, 3) == 1)
+   return MASK_OP (insn, (0x1f << 20) | (0x7 << 6));
+ else if (__GF (insn, 20 ,3) == 2 && __GF (insn, 6, 3) == 1)
+   return MASK_OP (insn, (0x1f << 20) | (0xf << 5));
+ else if (__GF (insn, 20 ,3) == 3 && __GF (insn, 6, 3) == 1)
+   return MASK_OP (insn, (0x1f << 20) | (0x1f << 5));
+ else if (__GF (insn, 7, 2) == 3)
+   return MASK_OP (insn, (0x1f << 20) | (0x3 << 7));
+ else if (__GF (insn, 6, 3) == 2)
+   return MASK_OP (insn, (0x1f << 20) | (0xf << 5));
+ else
+   return MASK_OP (insn, (0x1f << 20) | (0x7 << 6));
+      case 0x1:
+ if (__GF (insn, 20, 3) == 0)
+   return MASK_OP (insn, (0x1f << 20) | (0x1 << 5));
+ else if (__GF (insn, 20, 3) == 1)
+   return MASK_OP (insn, (0x1f << 20));
+ else if (__GF (insn, 6, 3) == 2)
+   return MASK_OP (insn, (0x1f << 20) | (0xf << 5));
+ else if (__GF (insn, 7, 2) == 3)
+   return MASK_OP (insn, (0x1f << 20) | (0x3 << 7));
+ else
+   return MASK_OP (insn, (0x1f << 20) | (0x7 << 6));
+      case 0x2:
+ if (__GF (insn, 6, 3) == 2)
+   return MASK_OP (insn, (0x1f << 20) | (0xf << 5));
+ else if (__GF (insn, 7, 2) == 3)
+   return MASK_OP (insn, (0x1f << 20) | (0x3 << 7));
+ else
+   return MASK_OP (insn, (0x1f << 20) | (0x7 << 6));
+      }
+    return MASK_OP (insn, 0x1f << 20);
+    default:
+      return (1 << 31);
+    }
+}
+static char *cctl_subtype [] =
+{
+  "st0", "st0", "st0", "st2", "st2", "st3", "st3", "st4",
+  "st1", "st1", "st1", "st0", "st0", NULL, NULL, "st5",
+  "st0", NULL, NULL, "st2", "st2", "st3", "st3", NULL,
+  "st1", NULL, NULL, "st0", "st0", NULL, NULL, NULL
+};
+static void
+nds32_special_opcode (uint32_t insn, struct nds32_opcode **opc)
+{
+  char *string = NULL;
+  uint32_t op;
+  if (!(*opc))
+    return;
+  switch ((*opc)->value)
+    {
+    case OP6 (LWC):
+    case OP6 (SWC):
+    case OP6 (LDC):
+    case OP6 (SDC):
+    case FPU_RA_IMMBI (LWC):
+    case FPU_RA_IMMBI (SWC):
+    case FPU_RA_IMMBI (LDC):
+    case FPU_RA_IMMBI (SDC):
       if (__GF (insn, 13, 2) == 0)
-	{
-	  char ls = (op & 1) ? 's' : 'l';
-	  char wd = (op & 2) ? 'd' : 's';
-
-	  if (insn & __BIT (12))
-	    {
-	      func (stream, "f%c%ci.bi\t$f%c%d, [%s], %d", ls, wd,
-		    wd, rt, gpr_map[ra], IMMS (insn, 12) << 2);
-	    }
-	  else
-	    {
-	      func (stream, "f%c%ci\t$f%c%d, [%s + %d]", ls, wd,
-		    wd, rt, gpr_map[ra], IMMS (insn, 12) << 2);
-	    }
-	}
-      else
-	{
-	  char ls = (op & 1) ? 's' : 'l';
-	  char wd = (op & 2) ? 'd' : 'w';
-	  int cp = __GF (insn, 13, 2);
-
-	  if (insn & __BIT (12))
-	    {
-	      func (stream, "cp%c%ci\tcp%d, $cpr%d, [%s], %d", ls, wd,
-		    cp, rt, gpr_map[ra], IMMS (insn, 12) << 2);
-	    }
-	  else
-	    {
-	      func (stream, "cp%c%ci\tcp%d, $cpr%d, [%s + %d]", ls, wd,
-		    cp, rt, gpr_map[ra], IMMS (insn, 12) << 2);
-	    }
-	}
-      return;
-    case 0x1c:			/* MEM */
-      print_insn32_mem (pc, info, insn);
-      return;
-    case 0x1d:			/* LSMW */
       {
-	int enb4 = __GF (insn, 6, 4);
-	char ls = (insn & __BIT (5)) ? 's' : 'l';
-	char ab = (insn & __BIT (4)) ? 'a' : 'b';
-	char *di = (insn & __BIT (3)) ? "d" : "i";
-	char *m = (insn & __BIT (2)) ? "m" : "";
-	static const char *s[] = {"", "a", "zb", "?"};
-
-	/* lsmwzb only always increase.  */
-	if ((insn & 0x3) == 2)
-	  di = "";
-
-	func (stream, "%cmw%s.%c%s%s\t%s, [%s], %s, 0x%x",
-	      ls, s[insn & 0x3], ab, di, m, gpr_map[rt],
-	      gpr_map[ra], gpr_map[rb], enb4);
+ while (!((*opc)->attr & ATTR (FPU)) && (*opc)->next)
+   *opc = (*opc)->next;
       }
-      return;
-    case 0x1e:			/* HWGP */
-      op = __GF (insn, 17, 3);
-      switch (op)
-	{
-	case 0: case 1:		/* lhi.gp */
-	case 2: case 3:		/* lhsi.gp */
-	case 4: case 5:		/* shi.gp */
-	  func (stream, "%s\t%s, [+ %d]",
-		mnemonic_hwgp[op], gpr_map[rt], IMMS (insn, 18) << 1);
-	  return;
-	case 6:			/* lwi.gp */
-	case 7:			/* swi.gp */
-	  func (stream, "%s\t%s, [+ %d]",
-		mnemonic_hwgp[op], gpr_map[rt], IMMS (insn, 17) << 2);
-	  return;
-	}
-      return;
-    case 0x1f:			/* SBGP */
-      if (insn & __BIT (19))
-	func (stream, "addi.gp\t%s, %d",
-	      gpr_map[rt], IMMS (insn, 19));
-      else
-	func (stream, "sbi.gp\t%s, [+ %d]",
-	      gpr_map[rt], IMMS (insn, 19));
-      return;
-    case 0x20:			/* ALU_1 */
-      print_insn32_alu1 (pc, info, insn);
-      return;
-    case 0x21:			/* ALU_2 */
-      print_insn32_alu2 (pc, info, insn);
-      return;
-    case 0x22:			/* movi */
-      func (stream, "movi\t%s, %d", gpr_map[rt], IMMS (insn, 20));
-      return;
-    case 0x23:			/* sethi */
-      func (stream, "sethi\t%s, 0x%x", gpr_map[rt], IMMU (insn, 20));
-      return;
-    case 0x24:			/* ji, jal */
-      /* FIXME: Handle relocation.  */
-      if (info->flags & INSN_HAS_RELOC)
-	pc = 0;
-      func (stream, "%s\t", ((insn & __BIT (24)) ? "jal" : "j"));
-      info->print_address_func ((IMMS (insn, 24) << 1) + pc, info);
-      return;
-    case 0x25:			/* jreg */
-      print_insn32_jreg (pc, info, insn);
-      return;
-    case 0x26:			/* br1 */
-      func (stream, "%s\t%s, %s, ", ((insn & __BIT (14)) ? "bne" : "beq"),
-	    gpr_map[rt], gpr_map[ra]);
-      info->print_address_func ((IMMS (insn, 14) << 1) + pc, info);
-      return;
-    case 0x27:			/* br2 */
-      func (stream, "%s\t%s, ", mnemonic_br2[__GF (insn, 16, 4)],
-	    gpr_map[rt]);
-      info->print_address_func ((IMMS (insn, 16) << 1) + pc, info);
-      return;
-    case 0x28:			/* addi */
-    case 0x2e:			/* slti */
-    case 0x2f:			/* sltsi */
-    case 0x29:			/* subri */
-      func (stream, "%s\t%s, %s, %d",
-	    mnemonic_op6[op], gpr_map[rt], gpr_map[ra], imm15s);
-      return;
-    case 0x2a:			/* andi */
-    case 0x2b:			/* xori */
-    case 0x2c:			/* ori */
-    case 0x33:			/* bitci */
-      func (stream, "%s\t%s, %s, %d",
-	    mnemonic_op6[op], gpr_map[rt], gpr_map[ra], imm15u);
-      return;
-    case 0x2d:			/* br3, beqc, bnec */
-      func (stream, "%s\t%s, %d, ", ((insn & __BIT (19)) ? "bnec" : "beqc"),
-	    gpr_map[rt], __SEXT (__GF (insn, 8, 11), 11));
-      info->print_address_func ((IMMS (insn, 8) << 1) + pc, info);
-      return;
-    case 0x32:			/* misc */
-      print_insn32_misc (pc, info, insn);
-      return;
-    case 0x35:			/* FPU */
-      print_insn32_fpu (pc, info, insn);
+      break;
+    case ALU1 (ADD):
+    case ALU1 (SUB):
+    case ALU1 (AND):
+    case ALU1 (XOR):
+    case ALU1 (OR):
+      if (N32_SH5(insn) != 0)
+        string = "sh";
+      break;
+    case ALU1 (SRLI):
+      if (__GF (insn, 10, 15) == 0)
+        string = "nop";
+      break;
+    case MISC (CCTL):
+      string = cctl_subtype [__GF (insn, 5, 5)];
+      break;
+    case JREG (JR):
+    case JREG (JRAL):
+    case JREG (JR) | JREG_RET:
+      if (__GF (insn, 8, 2) != 0)
+ string = "tit";
+    break;
+    case N32_OP6_COP:
+    break;
+    case 0xea00:
+      if (__GF (insn, 5, 4) != 0)
+ string = "ex9";
+      break;
+    case 0x9200:
+      if (__GF (insn, 0, 9) == 0)
+ string = "nop16";
+      break;
+    }
+  if (string)
+    {
+      while (strstr ((*opc)->opcode, string) == NULL
+      && strstr ((*opc)->instruction, string) == NULL && (*opc)->next)
+ *opc = (*opc)->next;
       return;
     }
+  op = N32_OP6 (insn);
+  if (op == N32_OP6_COP && __GF (insn, 4, 2) != 0)
+    {
+      while (((*opc)->attr & ATTR (FPU)) != 0 && (*opc)->next)
+ *opc = (*opc)->next;
+    }
 }
-
 int
-print_insn_nds32 (bfd_vma pc, disassemble_info *info)
+print_insn_nds32 (bfd_vma pc, disassemble_info * info)
 {
   int status;
   bfd_byte buf[4];
+  bfd_byte buf_data[16];
+  long long given;
+  long long given1;
   uint32_t insn;
-
-  status = info->read_memory_func (pc, (bfd_byte *) buf, 2, info);
-  if (status)
-    return -1;
-
-  /* 16-bit instruction.  */
-  if (buf[0] & 0x80)
+  int n;
+  int last_symbol_index = -1;
+  bfd_vma addr;
+  int is_data = FALSE;
+  bfd_boolean found = FALSE;
+  struct nds32_private_data *private_data;
+  unsigned int size = 16;
+  enum map_type mapping_type = MAP_CODE;
+  if (info->private_data == NULL)
     {
-      insn = bfd_getb16 (buf);
-      print_insn16 (pc, info, insn);
+      static struct nds32_private_data private;
+      private.has_mapping_symbols = -1;
+      private.last_symbol_index = -1;
+      private.last_addr = 0;
+      info->private_data = &private;
+    }
+  private_data = info->private_data;
+  if (info->symtab_size != 0)
+    {
+      int start;
+      if (pc == 0)
+ start = 0;
+      else
+ {
+   start = info->symtab_pos;
+   if (start < private_data->last_symbol_index)
+     start = private_data->last_symbol_index;
+ }
+      if (0 > start)
+ start = 0;
+      if (private_data->has_mapping_symbols != 0
+   && ((strncmp (".text", info->section->name, 5) == 0)))
+ {
+   for (n = start; n < info->symtab_size; n++)
+     {
+       addr = bfd_asymbol_value (info->symtab[n]);
+       if (addr > pc)
+  break;
+       if (get_mapping_symbol_type (info, n, &mapping_type))
+  {
+    last_symbol_index = n;
+    found = TRUE;
+  }
+     }
+   if (found)
+     private_data->has_mapping_symbols = 1;
+   else if (!found && private_data->has_mapping_symbols == -1)
+     {
+       for (n = 0; n < info->symtab_size; n++)
+  {
+    if (is_mapping_symbol (info, n, &mapping_type))
+      {
+        private_data->has_mapping_symbols = -1;
+        break;
+      }
+  }
+       if (private_data->has_mapping_symbols == -1)
+  private_data->has_mapping_symbols = 0;
+     }
+   private_data->last_symbol_index = last_symbol_index;
+   private_data->last_mapping_type = mapping_type;
+   is_data = (private_data->last_mapping_type == MAP_DATA0
+       || private_data->last_mapping_type == MAP_DATA1
+       || private_data->last_mapping_type == MAP_DATA2
+       || private_data->last_mapping_type == MAP_DATA3
+       || private_data->last_mapping_type == MAP_DATA4);
+ }
+    }
+  if (is_data)
+    {
+      unsigned int i1;
+      if (last_symbol_index + 1 >= info->symtab_size)
+        {
+          if (mapping_type == MAP_DATA0)
+            size = 1;
+          if (mapping_type == MAP_DATA1)
+            size = 2;
+          if (mapping_type == MAP_DATA2)
+            size = 4;
+          if (mapping_type == MAP_DATA3)
+            size = 8;
+          if (mapping_type == MAP_DATA4)
+            size = 16;
+        }
+      for (n = last_symbol_index + 1; n < info->symtab_size; n++)
+ {
+   addr = bfd_asymbol_value (info->symtab[n]);
+          enum map_type fake_mapping_type;
+   if (get_mapping_symbol_type (info, n, &fake_mapping_type))
+     {
+       if (addr > pc
+    && ((info->section == NULL)
+        || (info->section == info->symtab[n]->section)))
+  {
+    if (addr - pc < size)
+      {
+        size = addr - pc;
+        break;
+      }
+  }
+     }
+ }
+      if (size == 3)
+ size = (pc & 1) ? 1 : 2;
+      info->read_memory_func (pc, (bfd_byte *) buf_data, size, info);
+      given = 0;
+      given1 = 0;
+      if (info->endian == BFD_ENDIAN_LITTLE)
+ {
+   for (i1 = size - 1;; i1--)
+     {
+              if (i1 >= 8)
+         given1 = buf_data[i1] | (given1 << 8);
+              else
+         given = buf_data[i1] | (given << 8);
+       if (i1 == 0)
+  break;
+     }
+ }
+      else
+ {
+   for (i1 = 0; i1 < size; i1++) {
+            if (i1 <= 7)
+       given = buf_data[i1] | (given << 8);
+            else
+       given1 = buf_data[i1] | (given1 << 8);
+          }
+ }
+      info->bytes_per_line = 4;
+      if (size == 16)
+        {
+          info->fprintf_func (info->stream, ".qword\t0x%016llx%016llx",
+                                given, given1);
+        }
+      else if (size == 8)
+        {
+          info->fprintf_func (info->stream, ".dword\t0x%016llx", given);
+        }
+      else if (size == 4)
+        {
+          info->fprintf_func (info->stream, ".word\t0x%08llx", given);
+        }
+      else if (size == 2)
+        {
+          if (mapping_type == MAP_DATA0)
+     info->fprintf_func (info->stream, ".byte\t0x%02llx", given & 0xFF);
+          else
+            info->fprintf_func (info->stream, ".short\t0x%04llx", given);
+        }
+      else
+        {
+          info->fprintf_func (info->stream, ".byte\t0x%02llx", given);
+        }
+      return size;
+    }
+  status = info->read_memory_func (pc, (bfd_byte *) buf, 4, info);
+  if (status)
+    {
+      status = info->read_memory_func (pc, (bfd_byte *) buf, 2, info);
+      if (status)
+ {
+   (*info->memory_error_func)(status, pc, info);
+   return -1;
+ }
+    }
+  insn = bfd_getb32 (buf);
+  if (insn & 0x80000000)
+    {
+      print_insn16 (pc, info, (insn >> 16), NDS32_PARSE_INSN16);
       return 2;
     }
-
-  /* 32-bit instructions.  */
-  status = info->read_memory_func (pc + 2, (bfd_byte *) buf + 2, 2, info);
-  if (status)
-    return -1;
-
-  insn = bfd_getb32 (buf);
-  print_insn32 (pc, info, insn);
-
-  return 4;
+  else
+    {
+      print_insn32 (pc, info, insn, NDS32_PARSE_INSN32);
+      return 4;
+    }
+}
+bfd_boolean
+nds32_symbol_is_valid (asymbol *sym,
+         struct disassemble_info *info ATTRIBUTE_UNUSED)
+{
+  const char *name;
+  if (sym == NULL)
+    return FALSE;
+  name = bfd_asymbol_name (sym);
+  if (name[0] == '$' || (strstr (name, "$nds32ifc_") != NULL))
+    return FALSE;
+  return TRUE;
+}
+void
+nds32_add_opcode_hash_table (unsigned indx)
+{
+  opcode_t *opc;
+  opc = nds32_opcode_table[indx];
+  if (opc == NULL)
+    return;
+  while (opc->opcode != NULL)
+    {
+      opcode_t **slot;
+      slot = (opcode_t **) htab_find_slot (opcode_htab, &opc->value, INSERT);
+      if (*slot == NULL)
+ {
+   *slot = opc;
+ }
+      else
+ {
+   opcode_t *tmp;
+   tmp = *slot;
+   while (tmp->next)
+     tmp = tmp->next;
+   tmp->next = opc;
+          opc->next = NULL;
+ }
+      opc++;
+    }
+}
+void
+disassemble_init_for_nds32 (struct disassemble_info *info)
+{
+  static unsigned init_done = 0;
+  const char *ptr;
+  unsigned k;
+  info->symbol_is_valid = nds32_symbol_is_valid;
+  if (init_done)
+    return;
+  nds32_keyword_table[NDS32_MAIN_CORE] = &keywords[0];
+  nds32_opcode_table[NDS32_MAIN_CORE] = &nds32_opcodes[0];
+  nds32_field_table[NDS32_MAIN_CORE] = &operand_fields[0];
+  ptr = info->disassembler_options;
+  if (ptr != NULL)
+    {
+      const char *start, *end;
+      do
+ {
+   char name[256];
+   start = strchr(ptr, '=');
+   end = strchr(ptr, ',');
+   if (start == NULL)
+     fprintf (stderr, "Unknown nds32 disassembler option: %s\n", ptr);
+   else
+     {
+       start++;
+       if (end == NULL)
+  strcpy (name, start);
+       else
+  strncpy (name, start, end - start);
+       if (strncmp (ptr, "ace=", 4) == 0)
+  nds32_parse_udi (name);
+       else if (strncmp (ptr, "cop0=", 5) == 0)
+  nds32_parse_cop0 (name);
+       else if (strncmp (ptr, "cop1=", 5) == 0)
+  nds32_parse_cop1 (name);
+       else if (strncmp (ptr, "cop2=", 5) == 0)
+  nds32_parse_cop2 (name);
+       else if (strncmp (ptr, "cop3=", 5) == 0)
+  nds32_parse_cop3 (name);
+       else
+  fprintf (stderr, "Unknown nds32 disassembler option: %s\n",
+    ptr);
+       if (end == NULL)
+  break;
+       ptr = end + 1;
+     }
+ } while (1);
+    }
+  opcode_htab = htab_create_alloc (1024, htab_hash_hash, htab_hash_eq, NULL,
+       xcalloc, free);
+  for (k = 0; k < NDS32_CORE_COUNT; k++)
+    {
+      nds32_add_opcode_hash_table (k);
+    }
+  init_done = 1;
+}
+static int
+is_mapping_symbol (struct disassemble_info *info, int n,
+     enum map_type *map_type)
+{
+  const char *name = NULL;
+  name = bfd_asymbol_name (info->symtab[n]);
+  if (name[1] == 'c')
+    {
+      *map_type = MAP_CODE;
+      return TRUE;
+    }
+  else if (name[1] == 'd' && name[2] == '0')
+    {
+      *map_type = MAP_DATA0;
+      return TRUE;
+    }
+  else if (name[1] == 'd' && name[2] == '1')
+    {
+      *map_type = MAP_DATA1;
+      return TRUE;
+    }
+  else if (name[1] == 'd' && name[2] == '2')
+    {
+      *map_type = MAP_DATA2;
+      return TRUE;
+    }
+  else if (name[1] == 'd' && name[2] == '3')
+    {
+      *map_type = MAP_DATA3;
+      return TRUE;
+    }
+  else if (name[1] == 'd' && name[2] == '4')
+    {
+      *map_type = MAP_DATA4;
+      return TRUE;
+    }
+  return FALSE;
+}
+static int
+get_mapping_symbol_type (struct disassemble_info *info, int n,
+    enum map_type *map_type)
+{
+  if (info->section != NULL && info->section != info->symtab[n]->section)
+    return FALSE;
+  return is_mapping_symbol (info, n, map_type);
+}
+void
+print_nds32_disassembler_options (FILE *stream)
+{
+  fprintf (stream, _("\n\
+The following Andes specific disassembler options are supported for use with\n\
+the -M switch:\n"));
+  fprintf (stream, "  ace=<shrlibfile>         Support user defined instruction extension\n");
+  fprintf (stream, "  cop0=<shrlibfile>        Support coprocessor 0 extension\n");
+  fprintf (stream, "  cop1=<shrlibfile>        Support coprocessor 1 extension\n");
+  fprintf (stream, "  cop2=<shrlibfile>        Support coprocessor 2 extension\n");
+  fprintf (stream, "  cop3=<shrlibfile>        Support coprocessor 3 extension\n\n");
 }

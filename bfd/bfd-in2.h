@@ -299,9 +299,6 @@ typedef struct bfd_section *sec_ptr;
 
 #define bfd_is_com_section(ptr) (((ptr)->flags & SEC_IS_COMMON) != 0)
 
-#define bfd_set_section_vma(bfd, ptr, val) (((ptr)->vma = (ptr)->lma = (val)), ((ptr)->user_set_vma = TRUE), TRUE)
-#define bfd_set_section_alignment(bfd, ptr, val) (((ptr)->alignment_power = (val)),TRUE)
-#define bfd_set_section_userdata(bfd, ptr, val) (((ptr)->userdata = (val)),TRUE)
 /* Find the address one past the end of SEC.  */
 #define bfd_get_section_limit(bfd, sec) \
   (((bfd)->direction != write_direction && (sec)->rawsize != 0	\
@@ -523,8 +520,6 @@ extern void warn_deprecated (const char *, const char *, int, const char *);
 #define bfd_get_dynamic_symcount(abfd) ((abfd)->dynsymcount)
 
 #define bfd_get_symbol_leading_char(abfd) ((abfd)->xvec->symbol_leading_char)
-
-#define bfd_set_cacheable(abfd,bool) (((abfd)->cacheable = bool), TRUE)
 
 extern bfd_boolean bfd_cache_close
   (bfd *abfd);
@@ -1067,9 +1062,7 @@ unsigned long bfd_calc_gnu_debuglink_crc32
 
 char *bfd_get_debug_link_info (bfd *abfd, unsigned long *crc32_out);
 
-char *bfd_get_alt_debug_link_info (bfd * abfd,
-    bfd_size_type *buildid_len,
-    bfd_byte **buildid_out);
+char *bfd_get_alt_debug_link_info (bfd *abfd, unsigned long *crc32_out);
 
 char *bfd_follow_gnu_debuglink (bfd *abfd, const char *dir);
 
@@ -1595,6 +1588,32 @@ struct relax_table {
   /* Number of bytes to be deleted.  */
   int size;
 };
+
+/* Note: the following are provided as inline functions rather than macros
+   because not all callers use the return value.  A macro implementation
+   would use a comma expression, eg: "((ptr)->foo = val, TRUE)" and some
+   compilers will complain about comma expressions that have no effect.  */
+static inline bfd_boolean
+bfd_set_section_userdata (bfd * abfd ATTRIBUTE_UNUSED, asection * ptr, void * val)
+{
+  ptr->userdata = val;
+  return TRUE;
+}
+
+static inline bfd_boolean
+bfd_set_section_vma (bfd * abfd ATTRIBUTE_UNUSED, asection * ptr, bfd_vma val)
+{
+  ptr->vma = ptr->lma = val;
+  ptr->user_set_vma = TRUE;
+  return TRUE;
+}
+
+static inline bfd_boolean
+bfd_set_section_alignment (bfd * abfd ATTRIBUTE_UNUSED, asection * ptr, unsigned int val)
+{
+  ptr->alignment_power = val;
+  return TRUE;
+}
 
 /* These sections are global, and are managed by BFD.  The application
    and target back end are not permitted to change the values in
@@ -3877,6 +3896,9 @@ and shift left by 1 for use in lhi.gp, shi.gp...  */
 and shift left by 0 for use in lbi.gp, sbi.gp...  */
   BFD_RELOC_NDS32_SDA19S0,
 
+/* This is a 24-bit reloc for security check sum.  */
+  BFD_RELOC_NDS32_SECURITY_16,
+
 /* for PIC  */
   BFD_RELOC_NDS32_GOT20,
   BFD_RELOC_NDS32_9_PLTREL,
@@ -3908,6 +3930,13 @@ and shift left by 0 for use in lbi.gp, sbi.gp...  */
   BFD_RELOC_NDS32_15_FIXED,
   BFD_RELOC_NDS32_17_FIXED,
   BFD_RELOC_NDS32_25_FIXED,
+  BFD_RELOC_NDS32_LONGCALL4,
+  BFD_RELOC_NDS32_LONGCALL5,
+  BFD_RELOC_NDS32_LONGCALL6,
+  BFD_RELOC_NDS32_LONGJUMP4,
+  BFD_RELOC_NDS32_LONGJUMP5,
+  BFD_RELOC_NDS32_LONGJUMP6,
+  BFD_RELOC_NDS32_LONGJUMP7,
 
 /* for PIC  */
   BFD_RELOC_NDS32_PLTREL_HI20,
@@ -3968,11 +3997,56 @@ This is a 5 bit absolute address.  */
   BFD_RELOC_NDS32_DIFF16,
   BFD_RELOC_NDS32_DIFF32,
   BFD_RELOC_NDS32_DIFF_ULEB128,
+  BFD_RELOC_NDS32_EMPTY,
+
+/* This is a 25 bit absolute address.  */
   BFD_RELOC_NDS32_25_ABS,
+
+/* For ex9 and ifc using.  */
   BFD_RELOC_NDS32_DATA,
   BFD_RELOC_NDS32_TRAN,
   BFD_RELOC_NDS32_17IFC_PCREL,
   BFD_RELOC_NDS32_10IFCU_PCREL,
+
+/* For TLS.  */
+  BFD_RELOC_NDS32_TPOFF,
+  BFD_RELOC_NDS32_GOTTPOFF,
+  BFD_RELOC_NDS32_TLS_LE_HI20,
+  BFD_RELOC_NDS32_TLS_LE_LO12,
+  BFD_RELOC_NDS32_TLS_LE_20,
+  BFD_RELOC_NDS32_TLS_LE_15S0,
+  BFD_RELOC_NDS32_TLS_LE_15S1,
+  BFD_RELOC_NDS32_TLS_LE_15S2,
+  BFD_RELOC_NDS32_TLS_LE_ADD,
+  BFD_RELOC_NDS32_TLS_LE_LS,
+  BFD_RELOC_NDS32_TLS_IE_HI20,
+  BFD_RELOC_NDS32_TLS_IE_LO12,
+  BFD_RELOC_NDS32_TLS_IE_LO12S2,
+  BFD_RELOC_NDS32_TLS_IEGP_HI20,
+  BFD_RELOC_NDS32_TLS_IEGP_LO12,
+  BFD_RELOC_NDS32_TLS_IEGP_LO12S2,
+  BFD_RELOC_NDS32_TLS_IEGP_LW,
+  BFD_RELOC_NDS32_TLS_DESC,
+  BFD_RELOC_NDS32_TLS_DESC_HI20,
+  BFD_RELOC_NDS32_TLS_DESC_LO12,
+  BFD_RELOC_NDS32_TLS_DESC_20,
+  BFD_RELOC_NDS32_TLS_DESC_SDA17S2,
+  BFD_RELOC_NDS32_TLS_DESC_ADD,
+  BFD_RELOC_NDS32_TLS_DESC_FUNC,
+  BFD_RELOC_NDS32_TLS_DESC_CALL,
+  BFD_RELOC_NDS32_TLS_DESC_MEM,
+  BFD_RELOC_NDS32_REMOVE,
+  BFD_RELOC_NDS32_GROUP,
+
+/* Jump-patch table relative relocations.  */
+  BFD_RELOC_NDS32_ICT,
+  BFD_RELOC_NDS32_ICT_HI20,
+  BFD_RELOC_NDS32_ICT_LO12,
+  BFD_RELOC_NDS32_ICT_25PC,
+  BFD_RELOC_NDS32_ICT_LO12S2,
+
+/* For bug 12566.  */
+  BFD_RELOC_NDS32_LSI,
 
 /* This is a 9-bit reloc  */
   BFD_RELOC_V850_9_PCREL,
@@ -6414,6 +6488,14 @@ struct bfd
      this object.  Used by VMS linkers.  */
   unsigned int selective_search : 1;
 };
+
+/* See note beside bfd_set_section_userdata.  */
+static inline bfd_boolean
+bfd_set_cacheable (bfd * abfd, bfd_boolean val)
+{
+  abfd->cacheable = val;
+  return TRUE;
+}
 
 typedef enum bfd_error
 {

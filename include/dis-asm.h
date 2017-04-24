@@ -1,6 +1,7 @@
 /* Interface between the opcode library and its callers.
 
-   Copyright 1999-2013 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2009, 2010,
+   2011, 2012 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -314,6 +315,7 @@ extern disassembler_ftype cris_get_disassembler (bfd *);
 extern void print_aarch64_disassembler_options (FILE *);
 extern void print_i386_disassembler_options (FILE *);
 extern void print_mips_disassembler_options (FILE *);
+extern void print_nds32_disassembler_options (FILE *);
 extern void print_ppc_disassembler_options (FILE *);
 extern void print_arm_disassembler_options (FILE *);
 extern void parse_arm_disassembler_option (char *);
@@ -323,6 +325,9 @@ extern int  set_arm_regname_option (int);
 extern int  get_arm_regnames (int, const char **, const char **, const char *const **);
 extern bfd_boolean aarch64_symbol_is_valid (asymbol *, struct disassemble_info *);
 extern bfd_boolean arm_symbol_is_valid (asymbol *, struct disassemble_info *);
+extern bfd_boolean nds32_symbol_is_valid (asymbol *, struct disassemble_info *);
+extern void nds32_add_opcode_hash_table (unsigned indx);
+extern void disassemble_init_for_nds32 (struct disassemble_info *);
 extern void disassemble_init_powerpc (struct disassemble_info *);
 
 /* Fetch the disassembler for a given BFD, if that support is available.  */

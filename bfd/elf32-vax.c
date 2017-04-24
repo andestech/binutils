@@ -1408,12 +1408,12 @@ elf_vax_relocate_section (bfd *output_bfd,
       else
 	{
 	  bfd_boolean unresolved_reloc;
-	  bfd_boolean warned, ignored;
+	  bfd_boolean warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 
 	  if ((h->root.type == bfd_link_hash_defined
 	      || h->root.type == bfd_link_hash_defweak)

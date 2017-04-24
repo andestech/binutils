@@ -5146,7 +5146,8 @@ spu_elf_plugin (int val)
 /* Set ELF header e_type for plugins.  */
 
 static void
-spu_elf_post_process_headers (bfd *abfd, struct bfd_link_info *info)
+spu_elf_post_process_headers (bfd *abfd,
+			      struct bfd_link_info *info ATTRIBUTE_UNUSED)
 {
   if (spu_plugin)
     {
@@ -5154,8 +5155,6 @@ spu_elf_post_process_headers (bfd *abfd, struct bfd_link_info *info)
 
       i_ehdrp->e_type = ET_DYN;
     }
-
-  _bfd_elf_post_process_headers (abfd, info);
 }
 
 /* We may add an extra PT_LOAD segment for .toe.  We also need extra

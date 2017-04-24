@@ -263,7 +263,7 @@ read_leb128 (unsigned char *data,
     *length_return = num_read;
 
   if (sign && (shift < 8 * sizeof (result)) && (byte & 0x40))
-    result |= -1L << shift;
+    result |= (dwarf_vma) -1 << shift;
 
   return result;
 }
@@ -560,6 +560,8 @@ fetch_indirect_string (dwarf_vma offset)
   if (section->start == NULL)
     return (const unsigned char *) _("<no .debug_str section>");
 
+  /* DWARF sections under Mach-O have non-zero addresses.  */
+  offset -= section->address;
   if (offset > section->size)
     {
       warn (_("DW_FORM_strp offset too big: %s\n"),
@@ -585,6 +587,8 @@ fetch_indexed_string (dwarf_vma idx, struct cu_tu_set *this_set,
     return (dwo ? _("<no .debug_str_offsets.dwo section>")
 		: _("<no .debug_str_offsets section>"));
 
+  /* DWARF sections under Mach-O have non-zero addresses.  */
+  index_offset -= index_section->address;
   if (this_set != NULL)
     index_offset += this_set->section_offsets [DW_SECT_STR_OFFSETS];
   if (index_offset > index_section->size)
@@ -1805,10 +1809,11 @@ read_and_display_attr_value (unsigned long attribute,
     return data;
 
   /* For some attributes we can display further information.  */
+  printf ("\t");
+
   switch (attribute)
     {
     case DW_AT_inline:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_INL_not_inlined:
@@ -1831,7 +1836,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_language:
-      printf ("\t");
       switch (uvalue)
 	{
 	  /* Ordered by the numeric value of these constants.  */
@@ -1875,7 +1879,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_encoding:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_ATE_void:		printf ("(void)"); break;
@@ -1916,7 +1919,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_accessibility:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_ACCESS_public:		printf ("(public)"); break;
@@ -1929,7 +1931,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_visibility:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_VIS_local:		printf ("(local)"); break;
@@ -1940,7 +1941,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_virtuality:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_VIRTUALITY_none:	printf ("(none)"); break;
@@ -1951,7 +1951,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_identifier_case:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_ID_case_sensitive:	printf ("(case_sensitive)"); break;
@@ -1963,7 +1962,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_calling_convention:
-      printf ("\t");
       switch (uvalue)
 	{
 	case DW_CC_normal:	printf ("(normal)"); break;
@@ -1979,7 +1977,6 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     case DW_AT_ordering:
-      printf ("\t");
       switch (uvalue)
 	{
 	case -1: printf (_("(undefined)")); break;
@@ -2005,7 +2002,7 @@ read_and_display_attr_value (unsigned long attribute,
       if ((dwarf_version < 4
            && (form == DW_FORM_data4 || form == DW_FORM_data8))
 	  || form == DW_FORM_sec_offset)
-	printf (_(" (location list)"));
+	printf (_("(location list)"));
       /* Fall through.  */
     case DW_AT_allocated:
     case DW_AT_associated:
@@ -2017,7 +2014,7 @@ read_and_display_attr_value (unsigned long attribute,
 	{
 	  int need_frame_base;
 
-	  printf ("\t(");
+	  printf ("(");
 	  need_frame_base = decode_location_expression (block_start,
 							pointer_size,
 							offset_size,
@@ -2053,7 +2050,7 @@ read_and_display_attr_value (unsigned long attribute,
 
 	    abbrev_number = read_uleb128 (section->start + uvalue, NULL, end);
 
-	    printf (_("\t[Abbrev Number: %ld"), abbrev_number);
+	    printf (_("[Abbrev Number: %ld"), abbrev_number);
 	    /* Don't look up abbrev for DW_FORM_ref_addr, as it very often will
 	       use different abbrev table, and we don't track .debug_info chunks
 	       yet.  */
@@ -2370,7 +2367,8 @@ process_debug_info (struct dwarf_section *section,
 
       free_abbrevs ();
 
-      /* Process the abbrevs used by this compilation unit.  */
+      /* Process the abbrevs used by this compilation unit. DWARF
+	 sections under Mach-O have non-zero addresses.  */
       if (compunit.cu_abbrev_offset >= abbrev_size)
 	warn (_("Debug info is corrupted, abbrev offset (%lx) is larger than abbrev section size (%lx)\n"),
 	      (unsigned long) compunit.cu_abbrev_offset,
@@ -2665,13 +2663,9 @@ read_debug_line_header (struct dwarf_section * section,
     linfo->li_max_ops_per_insn = 1;
 
   SAFE_BYTE_GET_AND_INC (linfo->li_default_is_stmt, hdrptr, 1, end);
-  SAFE_BYTE_GET_AND_INC (linfo->li_line_base, hdrptr, 1, end);
+  SAFE_SIGNED_BYTE_GET_AND_INC (linfo->li_line_base, hdrptr, 1, end);
   SAFE_BYTE_GET_AND_INC (linfo->li_line_range, hdrptr, 1, end);
   SAFE_BYTE_GET_AND_INC (linfo->li_opcode_base, hdrptr, 1, end);
-
-      /* Sign extend the line base field.  */
-  linfo->li_line_base <<= 24;
-  linfo->li_line_base >>= 24;
 
   * end_of_sequence = data + linfo->li_length + initial_length_size;
   return hdrptr;
@@ -3509,29 +3503,9 @@ find_debug_info_for_offset (unsigned long offset)
   return NULL;
 }
 
-static const char *
-get_gdb_index_symbol_kind_name (gdb_index_symbol_kind kind)
-{
-  /* See gdb/gdb-index.h.  */
-  static const char * const kinds[] =
-  {
-    N_ ("no info"),
-    N_ ("type"),
-    N_ ("variable"),
-    N_ ("function"),
-    N_ ("other"),
-    N_ ("unused5"),
-    N_ ("unused6"),
-    N_ ("unused7")
-  };
-
-  return _ (kinds[kind]);
-}
-
 static int
-display_debug_pubnames_worker (struct dwarf_section *section,
-			       void *file ATTRIBUTE_UNUSED,
-			       int is_gnu)
+display_debug_pubnames (struct dwarf_section *section,
+			void *file ATTRIBUTE_UNUSED)
 {
   DWARF2_Internal_PubNames names;
   unsigned char *start = section->start;
@@ -3599,10 +3573,7 @@ display_debug_pubnames_worker (struct dwarf_section *section,
       printf (_("  Size of area in .debug_info section: %ld\n"),
 	      (long) names.pn_size);
 
-      if (is_gnu)
-	printf (_("\n    Offset  Kind          Name\n"));
-      else
-	printf (_("\n    Offset\tName\n"));
+      printf (_("\n    Offset\tName\n"));
 
       do
 	{
@@ -3611,29 +3582,7 @@ display_debug_pubnames_worker (struct dwarf_section *section,
 	  if (offset != 0)
 	    {
 	      data += offset_size;
-	      if (is_gnu)
-		{
-		  unsigned int kind_data;
-		  gdb_index_symbol_kind kind;
-		  const char *kind_name;
-		  int is_static;
-
-		  SAFE_BYTE_GET (kind_data, data, 1, end);
-		  data++;
-		  /* GCC computes the kind as the upper byte in the CU index
-		     word, and then right shifts it by the CU index size.
-		     Left shift KIND to where the gdb-index.h accessor macros
-		     can use it.  */
-		  kind_data <<= GDB_INDEX_CU_BITSIZE;
-		  kind = GDB_INDEX_SYMBOL_KIND_VALUE (kind_data);
-		  kind_name = get_gdb_index_symbol_kind_name (kind);
-		  is_static = GDB_INDEX_SYMBOL_STATIC_VALUE (kind_data);
-		  printf ("    %-6lx  %s,%-10s  %s\n",
-			  offset, is_static ? _("s") : _("g"),
-			  kind_name, data);
-		}
-	      else
-		printf ("    %-6lx\t%s\n", offset, data);
+	      printf ("    %-6lx\t%s\n", offset, data);
 	      data += strnlen ((char *) data, end - data) + 1;
 	    }
 	}
@@ -3642,18 +3591,6 @@ display_debug_pubnames_worker (struct dwarf_section *section,
 
   printf ("\n");
   return 1;
-}
-
-static int
-display_debug_pubnames (struct dwarf_section *section, void *file)
-{
-  return display_debug_pubnames_worker (section, file, 0);
-}
-
-static int
-display_debug_gnu_pubnames (struct dwarf_section *section, void *file)
-{
-  return display_debug_pubnames_worker (section, file, 1);
 }
 
 static int
@@ -4433,8 +4370,9 @@ display_debug_loc (struct dwarf_section *section, void *file)
   if (!seen_first_offset)
     error (_("No location lists in .debug_info section!\n"));
 
+  /* DWARF sections under Mach-O have non-zero addresses.  */
   if (debug_information [first].num_loc_offsets > 0
-      && debug_information [first].loc_offsets [0] != 0)
+      && debug_information [first].loc_offsets [0] != section->address)
     warn (_("Location lists in %s section start at 0x%s\n"),
 	  section->name,
 	  dwarf_vmatoa ("x", debug_information [first].loc_offsets [0]));
@@ -4469,7 +4407,8 @@ display_debug_loc (struct dwarf_section *section, void *file)
 		 == debug_information [i].loc_offsets [j])
 	    continue;
 	  has_frame_base = debug_information [i].have_frame_base [j];
-	  offset = debug_information [i].loc_offsets [j];
+	  /* DWARF sections under Mach-O have non-zero addresses.  */
+	  offset = debug_information [i].loc_offsets [j] - section->address;
 	  next = section_begin + offset;
 	  base_address = debug_information [i].base_address;
 
@@ -4877,7 +4816,8 @@ display_debug_ranges (struct dwarf_section *section,
   qsort (range_entries, num_range_list, sizeof (*range_entries),
 	 range_entry_compar);
 
-  if (dwarf_check != 0 && range_entries[0].ranges_offset != 0)
+  /* DWARF sections under Mach-O have non-zero addresses.  */
+  if (dwarf_check != 0 && range_entries[0].ranges_offset != section->address)
     warn (_("Range lists in %s section start at 0x%lx\n"),
 	  section->name, range_entries[0].ranges_offset);
 
@@ -4895,7 +4835,8 @@ display_debug_ranges (struct dwarf_section *section,
 
       pointer_size = debug_info_p->pointer_size;
 
-      offset = range_entry->ranges_offset;
+      /* DWARF sections under Mach-O have non-zero addresses.  */
+      offset = range_entry->ranges_offset - section->address;
       next = section_begin + offset;
       base_address = debug_info_p->base_address;
 
@@ -6196,9 +6137,38 @@ display_gdb_index (struct dwarf_section *section,
 	      else
 		printf ("%c%lu", num_cus > 1 ? '\t' : ' ', (unsigned long) cu);
 
-	      printf (" [%s, %s]",
-		      is_static ? _("static") : _("global"),
-		      get_gdb_index_symbol_kind_name (kind));
+	      switch (kind)
+		{
+		case GDB_INDEX_SYMBOL_KIND_NONE:
+		  printf (_(" [no symbol information]"));
+		  break;
+		case GDB_INDEX_SYMBOL_KIND_TYPE:
+		  printf (is_static
+			  ? _(" [static type]")
+			  : _(" [global type]"));
+		  break;
+		case GDB_INDEX_SYMBOL_KIND_VARIABLE:
+		  printf (is_static
+			  ? _(" [static variable]")
+			  : _(" [global variable]"));
+		  break;
+		case GDB_INDEX_SYMBOL_KIND_FUNCTION:
+		  printf (is_static
+			  ? _(" [static function]")
+			  : _(" [global function]"));
+		  break;
+		case GDB_INDEX_SYMBOL_KIND_OTHER:
+		  printf (is_static
+			  ? _(" [static other]")
+			  : _(" [global other]"));
+		  break;
+		default:
+		  printf (is_static
+			  ? _(" [static unknown: %d]")
+			  : _(" [global unknown: %d]"),
+			  kind);
+		  break;
+		}
 	      if (num_cus > 1)
 		printf ("\n");
 	    }
@@ -6822,8 +6792,6 @@ struct dwarf_section_display debug_displays[] =
     display_debug_lines,    &do_debug_lines,	1 },
   { { ".debug_pubnames",    ".zdebug_pubnames",	NULL, NULL, 0, 0, 0 },
     display_debug_pubnames, &do_debug_pubnames,	0 },
-  { { ".debug_gnu_pubnames", ".zdebug_gnu_pubnames", NULL, NULL, 0, 0, 0 },
-    display_debug_gnu_pubnames, &do_debug_pubnames, 0 },
   { { ".eh_frame",	    "",			NULL, NULL, 0, 0, 0 },
     display_debug_frames,   &do_debug_frames,	1 },
   { { ".debug_macinfo",	    ".zdebug_macinfo",	NULL, NULL, 0, 0, 0 },
@@ -6836,8 +6804,6 @@ struct dwarf_section_display debug_displays[] =
     display_debug_loc,	    &do_debug_loc,	1 },
   { { ".debug_pubtypes",    ".zdebug_pubtypes",	NULL, NULL, 0, 0, 0 },
     display_debug_pubnames, &do_debug_pubtypes,	0 },
-  { { ".debug_gnu_pubtypes", ".zdebug_gnu_pubtypes", NULL, NULL, 0, 0, 0 },
-    display_debug_gnu_pubnames, &do_debug_pubtypes, 0 },
   { { ".debug_ranges",	    ".zdebug_ranges",	NULL, NULL, 0, 0, 0 },
     display_debug_ranges,   &do_debug_ranges,	1 },
   { { ".debug_static_func", ".zdebug_static_func", NULL, NULL, 0, 0, 0 },

@@ -1,28 +1,3 @@
-2013-12-19  Dimitry Andric  <dimitry@andric.com>
-
-	* stringpool.cc (Stringpool_template::reserve): Add
-	HAVE_UNORDERED_MAP case.
-	* stringpool.cc (Stringpool_template::print_stats): Likewise.
-
-2013-12-18  Cary Coutant  <ccoutant@google.com>
-
-	* configure.ac: Check for <unordered_set> and <unordered_map>.
-	* config.in: Regenerate.
-	* configure: Regenerate.
-	* system.h: Use <unordered_set> and <unordered_map> if available.
-
-2013-12-10  Roland McGrath  <mcgrathr@google.com>
-
-	* Makefile.am (install-exec-local): Prefix $(INSTALL_PROGRAM) uses
-	with $(INSTALL_PROGRAM_ENV).
-	* Makefile.in: Regenerate.
-
-2013-11-22  Cary Coutant  <ccoutant@google.com>
-
-	* configure.ac: Add check for which library is needed for
-	dlopen.
-	* configure: Regenerate.
-
 2013-11-22  Cary Coutant  <ccoutant@google.com>
 
 	* testsuite/Makefile.am (exception_x86_64_bnd_test): Use in-tree
@@ -54,6 +29,8 @@
 
 2013-11-15  Alan Modra  <amodra@gmail.com>
 
+	Apply changes from mainline to 2.24
+	2013-11-15  Alan Modra  <amodra@gmail.com>
 	* powerpc.cc (Target_powerpc::glink_section): Provide non-const
 	accessor.
 	(Target_powerpc::Branch_info::make_stub): Make global entry stubs.
@@ -87,52 +64,7 @@
 	plt stub for ELFv2.
 	(Target_powerpc::do_plt_address_for_global): Similarly.
 
-2013-11-14  Cary Coutant  <ccoutant@google.com>
-
-	Revert patch -- this did not fix the problem, and there is
-	no race there.
-
-	2013-11-14  Cary Coutant  <ccoutant@google.com>
-
-	    PR gold/14860
-	    * ehframe.cc (Eh_frame_hdr::Eh_frame_hdr): Initialize lock_.
-	    (Ehframe_hdr::set_final_data_size): Allocate a Lock.
-	    * ehframe.h (Eh_frame_hdr::record_fde): Hold the lock while
-	    updating fde_offsets_.
-	    (Eh_frame_hdr::lock_): New data member.
-
-2013-11-14  Cary Coutant  <ccoutant@google.com>
-
-	* dwp.cc (Dwo_file_entry): New type.
-	(File_list): Use Dwo_file_entry.
-	(Dwo_file::verify): New function.
-	(Dwo_file::verify_dwo_list): New function.
-	(Dwo_file::sized_verify_dwo_list): New function.
-	(Dwo_name_info_reader::visit_compilation_unit): Add dwo_id to file
-	list.
-	(Dwp_options): New enum type.
-	(dwp_options): Add --verify-only.
-	(usage): Likewise.
-	(main): Likewise.
-	* dwp.h (gold_info): Add declaration.
-
-2013-11-14  Cary Coutant  <ccoutant@google.com>
-
-	PR gold/14860
-	* ehframe.cc (Eh_frame_hdr::Eh_frame_hdr): Initialize lock_.
-	(Ehframe_hdr::set_final_data_size): Allocate a Lock.
-	* ehframe.h (Eh_frame_hdr::record_fde): Hold the lock while
-	updating fde_offsets_.
-	(Eh_frame_hdr::lock_): New data member.
-
-2013-11-06  Cary Coutant  <ccoutant@google.com>
-
-	PR gold/15758
-	* object.cc (Sized_relobj_file::do_layout): Handle .eh_frame sections
-	before reloc sections.
-
-2013-11-04  Alan Modra  <amodra@gmail.com>
-
+	2013-11-04  Alan Modra  <amodra@gmail.com>
 	* symtab.h (Symbol::Reference_flags): Add FUNC_DESC_ABI.
 	(Symbol::needs_dynamic_reloc): Test new flag.
 	* powerpc.cc (needs_dynamic_reloc, use_plt_offset): Delete.
@@ -143,92 +75,7 @@
 	(Target_powerpc::Scan::global): Use Symbol::needs_dynamic_reloc.
 	(Target_powerpc::Relocate::relocate): Use Symbol::use_plt_offset.
 
-2013-10-31  Cary Coutant  <ccoutant@google.com>
-
-	Restore support for dwp v2 DWARF package file format.
-
-	* dwarf_reader.cc (Dwarf_info_reader::visit_type_unit): Add
-	tu_length parameter.  Adjust all callers.
-	* dwarf_reader.h (Dwarf_info_reader::visit_type_unit): Likewise.
-	* dwp.cc: Include dwarf.h.
-	(Section_bounds): New struct type.
-	(Unit_set): New struct type.
-	(Dwo_file::Dwo_file): Initialize new data member.
-	(Dwo_file::read_compunit_index, Dwo_file::read_typeunit_index):
-	Combine and rename to...
-	(Dwo_file::read_unit_index): ...this.
-	(Dwo_file::sized_read_compunit_index)
-	(Dwo_file::sized_read_typeunit_index): Combine and rename to...
-	(Dwo_file::sized_read_unit_index): ...this.
-	(Dwo_file::copy_section): Remove section_name, is_str_offsets
-	parameters; add section_id parameter.
-	(Dwo_file::add_cu_set, Dwo_file::add_tu_set): Combine and rename to...
-	(Dwo_file::add_unit_set): ...this.
-	(Dwo_file::shndx_map_): Remove.
-	(Dwo_file::sect_offsets_): New data member.
-	(Dwp_output_file::Dwp_output_file): Initialize new data members.
-	(Dwp_output_file::add_section): Rename to...
-	(Dwp_output_file::add_contribution): ...this.
-	(Dwp_output_file::add_cu_set): Combine parameters into a struct.
-	(Dwp_output_file::add_tu_set): Likewise.
-	(Dwp_output_file::Contribution): New type.
-	(Dwp_output_file::Section::contributions): New data member.
-	(Dwp_output_file::Cu_or_tu_set): Remove.
-	(Dwp_output_file::Section::Section): New ctor.
-	(Dwp_output_file::Dwp_index::Shndx_pool): Remove.
-	(Dwp_output_file::Dwp_index::Section_table): New type.
-	(Dwp_output_file::Dwp_index::Dwp_index): Initialize new data members.
-	(Dwp_output_file::Dwp_index::enter_set): Change type of "set"
-	parameter.
-	(Dwp_output_file::Dwp_index::shndx_pool): Remove.
-	(Dwp_output_file::Dwp_index::shndx_pool_end): Remove.
-	(Dwp_output_file::Dwp_index::section_table): New member function.
-	(Dwp_output_file::Dwp_index::section_table_end): New member function.
-	(Dwp_output_file::Dwp_index::shndx_pool_size): Remove.
-	(Dwp_output_file::Dwp_index::section_table_rows): New member function.
-	(Dwp_output_file::Dwp_index::section_table_cols): New member function.
-	(Dwp_output_file::Dwp_index::shndx_pool_): Remove.
-	(Dwp_output_file::Dwp_index::section_table_): New data member.
-	(Dwp_output_file::Dwp_index::section_mask_): New data member.
-	(Dwp_output_file::add_output_section): New member function.
-	(Dwp_output_file::write_new_section): New member function.
-	(Dwp_output_file::write_contributions): New member function.
-	(Dwp_output_file::section_id_map_): New data member.
-	(class Dwo_id_info_reader): Remove.
-	(class Unit_reader): New class.
-	(get_dwarf_section_name): New function.
-	(Dwo_file::read_executable): Adjust initializations of class data.
-	(Dwo_file::read): Add support for v2 package file format.
-	(Dwo_file::read_unit_index): Likewise.
-	(Dwo_file::sized_read_unit_index): Likewise.
-	(Dwo_file::copy_section): Likewise.
-	(Dwo_file::add_unit_set): Likewise.
-	(Dwp_output_file::add_output_section): Likewise.
-	(Dwp_output_file::add_contribution): Likewise.
-	(Dwp_output_file::Dwp_index::find_or_add): Use row index to check
-	for empty slot.
-	(Dwp_output_file::Dwp_index::enter_set): Add support for v2 package
-	file format.
-	(Dwp_output_file::Dwp_index::grow): Use row index to check for empty
-	slot.
-	(Dwp_output_file::initialize): Remove unused function.
-	(Dwp_output_file::finalize): Add support for v2 package file format.
-	(Dwp_output_file::write_index): Likewise.
-	* gdb-index.cc (Gdb_index_info_reader::visit_type_unit): Adjust
-	function prototype.
-
-2013-10-31  Cary Coutant  <ccoutant@google.com>
-
-	* configure.ac: Fix check for -fmerge-constants.
-	* configure.ac: Regenerate.
-
-2013-10-30  Roland McGrath  <mcgrathr@google.com>
-
-	* x86_64.cc (Output_data_plt_x86_64_nacl::first_plt_entry):
-	Correct 9-byte nop sequence to match what the assembler generates.
-
-2013-10-30  Alan Modra  <amodra@gmail.com>
-
+	2013-10-30  Alan Modra  <amodra@gmail.com>
 	* powerpc.cc (Powerpc_relobj::abiversion, set_abiversion,
 	ppc64_local_entry_offset, ppc64_local_entry_offset,
 	do_read_symbols): New functions.
@@ -267,12 +114,16 @@
 	(Target_powerpc::Relocate::relocate): Replaces nop after call
 	with ld 2,24(1) and adjust local offset destination for ELFv2.
 
-2013-10-30  Alan Modra  <amodra@gmail.com>
-
+	2013-10-30  Alan Modra  <amodra@gmail.com>
 	* powerpc.cc (Target_powerpc::Scan::check_non_pic): Handle new relocs.
 	(Target_powerpc::Scan::global, local): Likewise.
 	(Target_powerpc::Relocate::relocate): Likewise.  Check for overflow
 	on all ppc64 @h and @ha relocs.
+
+2013-10-30  Roland McGrath  <mcgrathr@google.com>
+
+	* x86_64.cc (Output_data_plt_x86_64_nacl::first_plt_entry):
+	Correct 9-byte nop sequence to match what the assembler generates.
 
 2013-10-14  Alan Modra  <amodra@gmail.com>
 
@@ -344,15 +195,6 @@
 
 	* archive.h: Use struct rather than class for forward declaration
 	of Read_symbols_data.
-
-2013-10-07  Cary Coutant  <ccoutant@google.com>
-
-	PR gold/16010
-	* testsuite/Makefile.am (icf_test): Fix dependencies.
-	(icf_safe_test): Likewise.
-	(icf_safe_so_test): Likewise.
-	(large_symbol_alignment): Add empty _LDADD rule.
-	* testsuite/Makefile.in: Regenerate.
 
 2013-09-03  Pavel Chupin  <pavel.v.chupin@intel.com>
 

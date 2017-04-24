@@ -1,0 +1,3 @@
+foo:
+	mtlbi 0xfffe
+	mtlei 0x0002

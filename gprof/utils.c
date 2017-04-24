@@ -34,6 +34,37 @@
 #include "cg_arcs.h"
 #include "utils.h"
 #include "corefile.h"
+#include <string.h>
+// ============================================================================
+// get_name
+//
+// This function returns the proper name of the symbol.
+// ============================================================================
+const char *
+get_name (const char *name)
+{   char *demangled = 0;
+
+    if (name)
+    {
+        if (!bsd_style_output)
+        {
+            if (name[0] == '_' && name[1] && discard_underscores)
+	    {
+                name++;
+	    }
+            if (demangle)
+            {
+                demangled = cplus_demangle (name, DMGL_ANSI | DMGL_PARAMS);
+                if (demangled)
+                {
+                    name = demangled;
+                }
+            }
+        }
+    }
+
+    return name;
+} // get_name
 
 
 /*
@@ -58,7 +89,7 @@ print_name_only (Sym *self)
 	}
       printf ("%s", name);
       size = strlen (name);
-      if ((line_granularity || inline_file_names) && self->file)
+      if (line_granularity && self->file)
 	{
 	  filename = self->file->name;
 	  if (!print_path)
@@ -73,15 +104,8 @@ print_name_only (Sym *self)
 		  filename = self->file->name;
 		}
 	    }
-	  if (line_granularity)
-	    {
-	      sprintf (buf, " (%s:%d @ %lx)", filename, self->line_num,
-		       (unsigned long) self->addr);
-	    }
-	  else
-	    {
-	      sprintf (buf, " (%s:%d)", filename, self->line_num);
-	    }
+	  sprintf (buf, " (%s:%d @ %lx)", filename, self->line_num,
+		   (unsigned long) self->addr);
 	  printf ("%s", buf);
 	  size += strlen (buf);
 	}

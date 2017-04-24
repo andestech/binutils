@@ -1117,17 +1117,13 @@ _bfd_elf_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
       || bfd_get_flavour (obfd) != bfd_target_elf_flavour)
     return TRUE;
 
-  if (!elf_flags_init (obfd))
-    {
-      elf_elfheader (obfd)->e_flags = elf_elfheader (ibfd)->e_flags;
-      elf_flags_init (obfd) = TRUE;
-    }
+  BFD_ASSERT (!elf_flags_init (obfd)
+	      || (elf_elfheader (obfd)->e_flags
+		  == elf_elfheader (ibfd)->e_flags));
 
   elf_gp (obfd) = elf_gp (ibfd);
-
-  /* Also copy the EI_OSABI field.  */
-  elf_elfheader (obfd)->e_ident[EI_OSABI] =
-    elf_elfheader (ibfd)->e_ident[EI_OSABI];
+  elf_elfheader (obfd)->e_flags = elf_elfheader (ibfd)->e_flags;
+  elf_flags_init (obfd) = TRUE;
 
   /* Copy object attributes.  */
   _bfd_elf_copy_obj_attributes (ibfd, obfd);
@@ -3075,13 +3071,11 @@ assign_section_numbers (bfd *abfd, struct bfd_link_info *link_info)
 	{
 	  d->rel.hdr->sh_link = elf_onesymtab (abfd);
 	  d->rel.hdr->sh_info = d->this_idx;
-	  d->rel.hdr->sh_flags |= SHF_INFO_LINK;
 	}
       if (d->rela.idx != 0)
 	{
 	  d->rela.hdr->sh_link = elf_onesymtab (abfd);
 	  d->rela.hdr->sh_info = d->this_idx;
-	  d->rela.hdr->sh_flags |= SHF_INFO_LINK;
 	}
 
       /* We need to set up sh_link for SHF_LINK_ORDER.  */
@@ -3168,10 +3162,7 @@ assign_section_numbers (bfd *abfd, struct bfd_link_info *link_info)
 	    name += 5;
 	  s = bfd_get_section_by_name (abfd, name);
 	  if (s != NULL)
-	    {
-	      d->this_hdr.sh_info = elf_section_data (s)->this_idx;
-	      d->this_hdr.sh_flags |= SHF_INFO_LINK;
-	    }
+	    d->this_hdr.sh_info = elf_section_data (s)->this_idx;
 	  break;
 
 	case SHT_STRTAB:
@@ -3462,7 +3453,8 @@ _bfd_elf_compute_section_file_positions (bfd *abfd,
     return FALSE;
 
   /* Post process the headers if necessary.  */
-  (*bed->elf_backend_post_process_headers) (abfd, link_info);
+  if (bed->elf_backend_post_process_headers)
+    (*bed->elf_backend_post_process_headers) (abfd, link_info);
 
   fsargs.failed = FALSE;
   fsargs.link_info = link_info;
@@ -5158,27 +5150,6 @@ assign_file_positions_except_relocs (bfd *abfd,
 	{
 	  if (!(*bed->elf_backend_modify_program_headers) (abfd, link_info))
 	    return FALSE;
-	}
-
-      /* Set e_type in ELF header to ET_EXEC for -pie -Ttext-segment=.  */
-      if (link_info != NULL
-	  && link_info->executable
-	  && link_info->shared)
-	{
-	  unsigned int num_segments = elf_elfheader (abfd)->e_phnum;
-	  Elf_Internal_Phdr *segment = elf_tdata (abfd)->phdr;
-	  Elf_Internal_Phdr *end_segment = &segment[num_segments];
-
-	  /* Find the lowest p_vaddr in PT_LOAD segments.  */
-	  bfd_vma p_vaddr = (bfd_vma) -1;
-	  for (; segment < end_segment; segment++)
-	    if (segment->p_type == PT_LOAD && p_vaddr > segment->p_vaddr)
-	      p_vaddr = segment->p_vaddr;
-
-	  /* Set e_type to ET_EXEC if the lowest p_vaddr in PT_LOAD
-	     segments is non-zero.  */
-	  if (p_vaddr)
-	    i_ehdrp->e_type = ET_EXEC;
 	}
 
       /* Write out the program headers.  */
@@ -10020,8 +9991,8 @@ asection _bfd_elf_large_com_section
 		      SEC_IS_COMMON, NULL, "LARGE_COMMON", 0);
 
 void
-_bfd_elf_post_process_headers (bfd * abfd,
-			       struct bfd_link_info * link_info ATTRIBUTE_UNUSED)
+_bfd_elf_set_osabi (bfd * abfd,
+		    struct bfd_link_info * link_info ATTRIBUTE_UNUSED)
 {
   Elf_Internal_Ehdr * i_ehdrp;	/* ELF file header, internal form.  */
 

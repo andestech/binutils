@@ -662,6 +662,7 @@ CPP
 am__fastdepCC_FALSE
 am__fastdepCC_TRUE
 CCDEPMODE
+am__nodep
 AMDEPBACKSLASH
 AMDEP_FALSE
 AMDEP_TRUE
@@ -3164,12 +3165,14 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing strerror" >&5
-$as_echo_n "checking for library containing strerror... " >&6; }
-if test "${ac_cv_search_strerror+set}" = set; then :
+
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for strerror in -lcposix" >&5
+$as_echo_n "checking for strerror in -lcposix... " >&6; }
+if test "${ac_cv_lib_cposix_strerror+set}" = set; then :
   $as_echo_n "(cached) " >&6
 else
-  ac_func_search_save_LIBS=$LIBS
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lcposix  $LIBS"
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -3188,37 +3191,22 @@ return strerror ();
   return 0;
 }
 _ACEOF
-for ac_lib in '' cposix; do
-  if test -z "$ac_lib"; then
-    ac_res="none required"
-  else
-    ac_res=-l$ac_lib
-    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
-  fi
-  if ac_fn_c_try_link "$LINENO"; then :
-  ac_cv_search_strerror=$ac_res
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_cposix_strerror=yes
+else
+  ac_cv_lib_cposix_strerror=no
 fi
 rm -f core conftest.err conftest.$ac_objext \
-    conftest$ac_exeext
-  if test "${ac_cv_search_strerror+set}" = set; then :
-  break
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
 fi
-done
-if test "${ac_cv_search_strerror+set}" = set; then :
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_cposix_strerror" >&5
+$as_echo "$ac_cv_lib_cposix_strerror" >&6; }
+if test "x$ac_cv_lib_cposix_strerror" = x""yes; then :
+  LIBS="$LIBS -lcposix"
+fi
 
-else
-  ac_cv_search_strerror=no
-fi
-rm conftest.$ac_ext
-LIBS=$ac_func_search_save_LIBS
-fi
-{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_strerror" >&5
-$as_echo "$ac_cv_search_strerror" >&6; }
-ac_res=$ac_cv_search_strerror
-if test "$ac_res" != no; then :
-  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
 
-fi
 
 
 BFD_VERSION=`${srcdir}/../bfd/configure --version | sed -n -e '1s,.* ,,p'`
@@ -3690,6 +3678,7 @@ fi
 if test "x$enable_dependency_tracking" != xno; then
   am_depcomp="$ac_aux_dir/depcomp"
   AMDEPBACKSLASH='\'
+  am__nodep='_no'
 fi
  if test "x$enable_dependency_tracking" != xno; then
   AMDEP_TRUE=
@@ -3752,11 +3741,11 @@ MAKEINFO=${MAKEINFO-"${am_missing_run}makeinfo"}
 
 # We need awk for the "check" target.  The system "awk" is bad on
 # some platforms.
-# Always define AMTAR for backward compatibility.
+# Always define AMTAR for backward compatibility.  Yes, it's still used
+# in the wild :-(  We should find a proper way to deprecate it ...
+AMTAR='$${TAR-tar}'
 
-AMTAR=${AMTAR-"${am_missing_run}tar"}
-
-am__tar='${AMTAR} chof - "$$tardir"'; am__untar='${AMTAR} xf -'
+am__tar='$${TAR-tar} chof - "$$tardir"' am__untar='$${TAR-tar} xf -'
 
 
 
@@ -3774,6 +3763,7 @@ else
   # instance it was reported that on HP-UX the gcc test will end up
   # making a dummy file named `D' -- because `-MD' means `put the output
   # in D'.
+  rm -rf conftest.dir
   mkdir conftest.dir
   # Copy depcomp to subdir because otherwise we won't find it if we're
   # using a relative directory.
@@ -3833,7 +3823,7 @@ else
 	break
       fi
       ;;
-    msvisualcpp | msvcmsys)
+    msvc7 | msvc7msys | msvisualcpp | msvcmsys)
       # This compiler won't grok `-c -o', but also, the minuso test has
       # not run yet.  These depmodes are late enough in the game, and
       # so weak that their functioning should not be impacted.
@@ -11201,7 +11191,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11204 "configure"
+#line 11194 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11307,7 +11297,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11310 "configure"
+#line 11300 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -12193,7 +12183,14 @@ _ACEOF
 	;;
 
       nds32)
-        # Decide BASELINE, REDUCED_REGS, FPU_DP_EXT, FPU_SP_EXT features
+	# setup NDS32_LINUX_TOOLCHAIN definition
+	if test "linux" = $em; then
+
+$as_echo "#define NDS32_LINUX_TOOLCHAIN 1" >>confdefs.h
+
+	fi
+
+	# Decide BASELINE, REDUCED_REGS, FPU_DP_EXT, FPU_SP_EXT features
 	# based on arch_name.
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --with-arch" >&5
 $as_echo_n "checking for default configuration of --with-arch... " >&6; }
@@ -12284,6 +12281,34 @@ $as_echo "#define NDS32_DEFAULT_AUDIO_EXT 1" >>confdefs.h
 	fi
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_audio_ext" >&5
 $as_echo "$enable_audio_ext" >&6; }
+
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --enable-dsp-ext" >&5
+$as_echo_n "checking for default configuration of --enable-dsp-ext... " >&6; }
+	if test "x${enable_dsp_ext}" == xno; then
+
+$as_echo "#define NDS32_DEFAULT_DSP_EXT 0" >>confdefs.h
+
+	else
+
+$as_echo "#define NDS32_DEFAULT_DSP_EXT 1" >>confdefs.h
+
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_dsp_ext" >&5
+$as_echo "$enable_dsp_ext" >&6; }
+
+        { $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --enable-zol-ext" >&5
+$as_echo_n "checking for default configuration of --enable-zol-ext... " >&6; }
+	if test "x${enable_zol_ext}" == xno; then
+
+$as_echo "#define NDS32_DEFAULT_ZOL_EXT 0" >>confdefs.h
+
+	else
+
+$as_echo "#define NDS32_DEFAULT_ZOL_EXT 1" >>confdefs.h
+
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_zol_ext" >&5
+$as_echo "$enable_zol_ext" >&6; }
 	;;
 
       i386 | s390 | sparc)

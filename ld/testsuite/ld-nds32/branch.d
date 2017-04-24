@@ -21,4 +21,3 @@ Disassembly of section .text:
 0+0026 <[^>]*> srli45	\$r0, 0
 0+0028 <[^>]*> bltzal	\$r0, 0000002c <main>
 0+002c <main>.*
-

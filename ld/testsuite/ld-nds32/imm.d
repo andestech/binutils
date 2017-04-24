@@ -12,4 +12,3 @@ Disassembly of section .text:
 0+1004 <[^>]*> ori	\$r0, \$r0, 836
 0+1008 <[^>]*> movi	\$r0, 70179
 0+100c <[^>]*> movi55	\$r0, 15
-

@@ -11267,8 +11267,7 @@ do_t_mvn_tst (void)
 	  || inst.operands[1].shifted
 	  || Rn > 7 || Rm > 7)
 	narrow = FALSE;
-      else if (inst.instruction == T_MNEM_cmn
-	       || inst.instruction == T_MNEM_tst)
+      else if (inst.instruction == T_MNEM_cmn)
 	narrow = TRUE;
       else if (THUMB_SETS_FLAGS (inst.instruction))
 	narrow = !in_it_block ();
@@ -11672,11 +11671,12 @@ do_t_push_pop (void)
 	      _("expression too complex"));
 
   mask = inst.operands[0].imm;
-  if (inst.size_req != 4 && (mask & ~0xff) == 0)
+  if ((mask & ~0xff) == 0)
     inst.instruction = THUMB_OP16 (inst.instruction) | mask;
-  else if (inst.size_req != 4
-	   && (mask & ~0xff) == (1 << (inst.instruction == T_MNEM_push
-				       ? REG_LR : REG_PC)))
+  else if ((inst.instruction == T_MNEM_push
+	    && (mask & ~0xff) == 1 << REG_LR)
+	   || (inst.instruction == T_MNEM_pop
+	       && (mask & ~0xff) == 1 << REG_PC))
     {
       inst.instruction = THUMB_OP16 (inst.instruction);
       inst.instruction |= THUMB_PP_PC_LR;

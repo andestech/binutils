@@ -412,12 +412,10 @@ gcc(1), ld(1), and the Info entries for @file{binutils} and @file{ld}.
    [@b{-mdmx}] [@b{-no-mdmx}]
    [@b{-mdsp}] [@b{-mno-dsp}]
    [@b{-mdspr2}] [@b{-mno-dspr2}]
-   [@b{-mmsa}] [@b{-mno-msa}]
    [@b{-mmt}] [@b{-mno-mt}]
    [@b{-mmcu}] [@b{-mno-mcu}]
    [@b{-minsn32}] [@b{-mno-insn32}]
    [@b{-mfix7000}] [@b{-mno-fix7000}]
-   [@b{-mfix-rm7000}] [@b{-mno-fix-rm7000}]
    [@b{-mfix-vr4120}] [@b{-mno-fix-vr4120}]
    [@b{-mfix-vr4130}] [@b{-mno-fix-vr4130}]
    [@b{-mdebug}] [@b{-no-mdebug}]
@@ -1283,11 +1281,6 @@ Schedule and tune for a particular MIPS CPU.
 Cause nops to be inserted if the read of the destination register
 of an mfhi or mflo instruction occurs in the following two instructions.
 
-@item -mfix-rm7000
-@itemx -mno-fix-rm7000
-Cause nops to be inserted if a dmult or dmultu instruction is
-followed by a load instruction.
-
 @item -mdebug
 @itemx -no-mdebug
 Cause stabs-style debugging output to go into an ECOFF-style .mdebug
@@ -1347,12 +1340,6 @@ Generate code for the DSP Release 2 Application Specific Extension.
 This option implies -mdsp.
 This tells the assembler to accept DSP Release 2 instructions.
 @samp{-mno-dspr2} turns off this option.
-
-@item -mmsa
-@itemx -mno-msa
-Generate code for the MIPS SIMD Architecture Extension.
-This tells the assembler to accept MSA instructions.
-@samp{-mno-msa} turns off this option.
 
 @item -mmt
 @itemx -mno-mt

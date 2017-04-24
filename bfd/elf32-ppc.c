@@ -7493,12 +7493,10 @@ ppc_elf_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean ignored;
-
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 
 	  sym_name = h->root.root.string;
 	}
@@ -9922,6 +9920,7 @@ ppc_elf_finish_dynamic_sections (bfd *output_bfd,
 #define elf_backend_plt_sym_val			ppc_elf_plt_sym_val
 #define elf_backend_action_discarded		ppc_elf_action_discarded
 #define elf_backend_init_index_section		_bfd_elf_init_1_index_section
+#define elf_backend_post_process_headers	_bfd_elf_set_osabi
 #define elf_backend_lookup_section_flags_hook	ppc_elf_lookup_section_flags
 #define elf_backend_section_processing		ppc_elf_section_processing
 

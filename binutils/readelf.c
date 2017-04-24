@@ -2323,27 +2323,24 @@ decode_NDS32_machine_flags (unsigned e_flags, char buf[], size_t size)
   int has_fpu = 0;
   int r = 0;
 
-  static const char *ABI_STRINGS[] =
-  {
-    "ABI v0", /* use r5 as return register; only used in N1213HC */
-    "ABI v1", /* use r0 as return register */
-    "ABI v2", /* use r0 as return register and don't reserve 24 bytes for arguments */
-    "ABI v2fp", /* for FPU */
-    "AABI"
+  static const char *ABI_STRINGS[] = {
+    [E_NDS_ABI_V0 >> EF_NDS_ABI_SHIFT] = "ABI v0", /* use r5 as return register; only used in N1213HC */
+    [E_NDS_ABI_V1 >> EF_NDS_ABI_SHIFT] = "ABI v1", /* use r0 as return register */
+    [E_NDS_ABI_V2 >> EF_NDS_ABI_SHIFT] = "ABI v2", /* use r0 as return register and don't reserve 24 bytes for arguments */
+    [E_NDS_ABI_V2FP >> EF_NDS_ABI_SHIFT] = "ABI v2fp", /* for FPU */
+    [E_NDS_ABI_AABI >> EF_NDS_ABI_SHIFT] = "AABI",
+    [E_NDS_ABI_V2FP_PLUS >> EF_NDS_ABI_SHIFT] = "ABI2 FP+"
   };
-  static const char *VER_STRINGS[] =
-  {
-    "Andes ELF V1.3 or older",
-    "Andes ELF V1.3.1",
-    "Andes ELF V1.4"
+  static const char *VER_STRINGS[] = {
+    [E_NDS32_ELF_VER_1_2 >> EF_NDS32_ELF_VERSION_SHIFT] = "Andes ELF V1.3 or older",
+    [E_NDS32_ELF_VER_1_3 >> EF_NDS32_ELF_VERSION_SHIFT] = "Andes ELF V1.3.1",
+    [E_NDS32_ELF_VER_1_4 >> EF_NDS32_ELF_VERSION_SHIFT] = "Andes ELF V1.4",
   };
-  static const char *ARCH_STRINGS[] =
-  {
-    "",
-    "Andes Star v1.0",
-    "Andes Star v2.0",
-    "Andes Star v3.0",
-    "Andes Star v3.0m"
+  static const char *ARCH_STRINGS[] = {
+    [E_NDS_ARCH_STAR_V1_0 >> EF_NDS_ARCH_SHIFT] = "Andes Star v1.0",
+    [E_NDS_ARCH_STAR_V2_0 >> EF_NDS_ARCH_SHIFT] = "Andes Star v2.0",
+    [E_NDS_ARCH_STAR_V3_0 >> EF_NDS_ARCH_SHIFT] = "Andes Star v3.0",
+    [E_NDS_ARCH_STAR_V3_M >> EF_NDS_ARCH_SHIFT] = "Andes Star v3.0m"
   };
 
   abi = EF_NDS_ABI & e_flags;
@@ -2360,7 +2357,8 @@ decode_NDS32_machine_flags (unsigned e_flags, char buf[], size_t size)
     case E_NDS_ABI_V2:
     case E_NDS_ABI_V2FP:
     case E_NDS_ABI_AABI:
-      /* In case there are holes in the array.  */
+    case E_NDS_ABI_V2FP_PLUS:
+      /* In case there are holes in the array. */
       r += snprintf (buf + r, size - r, ", %s", ABI_STRINGS[abi >> EF_NDS_ABI_SHIFT]);
       break;
 
@@ -2384,7 +2382,7 @@ decode_NDS32_machine_flags (unsigned e_flags, char buf[], size_t size)
 
   if (E_NDS_ABI_V0 == abi)
     {
-      /* OLD ABI; only used in N1213HC, has performance extension 1.  */
+      /* OLD ABI; only used in N1213HC, has performance extension 1 */
       r += snprintf (buf + r, size - r, ", Andes Star v1.0, N1213HC, MAC, PERF1");
       if (arch == E_NDS_ARCH_STAR_V1_0)
 	r += snprintf (buf + r, size -r, ", 16b"); /* has 16-bit instructions */
@@ -2403,11 +2401,11 @@ decode_NDS32_machine_flags (unsigned e_flags, char buf[], size_t size)
     default:
       r += snprintf (buf + r, size - r, ", <unrecognized architecture>");
       /* ARCH version determines how the e_flags are interpreted.
-	 If it is unknown, we cannot proceed.  */
+	 If it is unknown, we cannot proceed. */
       return;
     }
 
-  /* Newer ABI; Now handle architecture specific flags.  */
+  /* newer ABI; Now handle architecture specific flags.  */
   if (arch == E_NDS_ARCH_STAR_V1_0)
     {
       if (config & E_NDS32_HAS_MFUSR_PC_INST)
@@ -2469,6 +2467,16 @@ decode_NDS32_machine_flags (unsigned e_flags, char buf[], size_t size)
     {
       has_fpu = 1;
       r += snprintf (buf + r, size -r, ", FPU_MAC");
+    }
+
+  if (config & E_NDS32_HAS_DSP_INST)
+    {
+      r += snprintf (buf + r, size -r, ", DSP");
+    }
+
+  if (config & E_NDS32_HAS_ZOL)
+    {
+      r += snprintf (buf + r, size -r, ", ZOL");
     }
 
   if (has_fpu)
@@ -4382,7 +4390,7 @@ process_program_headers (FILE * file)
 	  else
 	    {
 	      char fmt [32];
-	      int ret = snprintf (fmt, sizeof (fmt), "%%%ds", PATH_MAX);
+	      int ret = snprintf (fmt, sizeof (fmt), "%%%ds", PATH_MAX - 1);
 
 	      if (ret >= (int) sizeof (fmt) || ret < 0)
 		error (_("Internal error: failed to create format string to display program interpreter\n"));
@@ -5130,8 +5138,6 @@ process_section_headers (FILE * file)
 	      || (do_debug_lines    && const_strneq (name, "line."))
 	      || (do_debug_pubnames && const_strneq (name, "pubnames"))
 	      || (do_debug_pubtypes && const_strneq (name, "pubtypes"))
-	      || (do_debug_pubnames && const_strneq (name, "gnu_pubnames"))
-	      || (do_debug_pubtypes && const_strneq (name, "gnu_pubtypes"))
 	      || (do_debug_aranges  && const_strneq (name, "aranges"))
 	      || (do_debug_ranges   && const_strneq (name, "ranges"))
 	      || (do_debug_frames   && const_strneq (name, "frame"))
@@ -10097,7 +10103,6 @@ process_symbol_table (FILE * file)
       counts = (unsigned long *) calloc (maxlength + 1, sizeof (*counts));
       if (counts == NULL)
 	{
-	  free (lengths);
 	  error (_("Out of memory\n"));
 	  return 0;
 	}
@@ -10166,7 +10171,6 @@ process_symbol_table (FILE * file)
       counts = (unsigned long *) calloc (maxlength + 1, sizeof (*counts));
       if (counts == NULL)
 	{
-	  free (lengths);
 	  error (_("Out of memory\n"));
 	  return 0;
 	}
@@ -12018,30 +12022,6 @@ display_mips_gnu_attribute (unsigned char * p,
       return p;
    }
 
-  if (tag == Tag_GNU_MIPS_ABI_MSA)
-    {
-      unsigned int len;
-      int val;
-
-      val = read_uleb128 (p, &len, end);
-      p += len;
-      printf ("  Tag_GNU_MIPS_ABI_MSA: ");
-
-      switch (val)
-	{
-	case Val_GNU_MIPS_ABI_MSA_ANY:
-	  printf (_("Any MSA or not\n"));
-	  break;
-	case Val_GNU_MIPS_ABI_MSA_128:
-	  printf (_("128-bit MSA\n"));
-	  break;
-	default:
-	  printf ("??? (%d)\n", val);
-	  break;
-	}
-      return p;
-    }
-
   return display_tag_value (tag & 1, p, end);
 }
 
@@ -13211,7 +13191,6 @@ process_nds32_specific (FILE * file)
   if (sect != NULL)
     {
       unsigned int *flag;
-
       printf ("\nNDS32 elf flags section:\n");
       flag = get_data (NULL, file, sect->sh_offset, 1,
 		       sect->sh_size, _("NDS32 elf flags section"));

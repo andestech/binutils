@@ -1,17 +1,11 @@
-@c Copyright 2013 Free Software Foundation, Inc.
+@c Copyright 1991, 1992, 1993, 1994, 1995, 1997, 1999, 2000, 2001,
+@c 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2013
+@c Free Software Foundation, Inc.
 @c This is part of the GAS manual.
 @c For copying conditions, see the file as.texinfo.
-@c man end
-
-@ifset GENERIC
 @page
 @node NDS32-Dependent
 @chapter NDS32 Dependent Features
-@end ifset
-@ifclear GENERIC
-@node Machine Dependencies
-@chapter NDS32 Dependent Features
-@end ifclear
 
 @cindex NDS32 processor
 The NDS32 processors family includes high-performance and low-power 32-bit
@@ -33,7 +27,6 @@ at http://www.andestech.com/en/index/index.htm
 The NDS32 configurations of @sc{gnu} @code{@value{AS}} support these
 special options:
 
-@c man begin OPTIONS
 @table @code
 
 @item -O1
@@ -118,7 +111,6 @@ Enable/Disable FPU fused-multiply-add instructions
 @item -mall-ext
 Turn on all extensions and instructions support
 @end table
-@c man end
 
 @node NDS32 Syntax
 @section Syntax

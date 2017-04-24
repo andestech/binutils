@@ -2335,7 +2335,7 @@ elf_x86_64_allocate_dynrelocs (struct elf_link_hash_entry *h, void * inf)
 	  /* If this is the first .plt entry, make room for the special
 	     first entry.  */
 	  if (s->size == 0)
-	    s->size = plt_entry_size;
+	    s->size += plt_entry_size;
 
 	  h->plt.offset = s->size;
 
@@ -3315,12 +3315,11 @@ elf_x86_64_relocate_section (bfd *output_bfd,
       else
 	{
 	  bfd_boolean warned ATTRIBUTE_UNUSED;
-	  bfd_boolean ignored ATTRIBUTE_UNUSED;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	  st_size = h->size;
 	}
 
@@ -5038,8 +5037,10 @@ elf_x86_64_plt_sym_val (bfd_vma i, const asection *plt,
    is called when elfcode.h finds a section with an unknown type.  */
 
 static bfd_boolean
-elf_x86_64_section_from_shdr (bfd *abfd, Elf_Internal_Shdr *hdr,
-			      const char *name, int shindex)
+elf_x86_64_section_from_shdr (bfd *abfd,
+				Elf_Internal_Shdr *hdr,
+				const char *name,
+				int shindex)
 {
   if (hdr->sh_type != SHT_X86_64_UNWIND)
     return FALSE;
@@ -5318,6 +5319,8 @@ static const struct bfd_elf_special_section
   elf_x86_64_additional_program_headers
 #define elf_backend_hash_symbol \
   elf_x86_64_hash_symbol
+
+#define elf_backend_post_process_headers  _bfd_elf_set_osabi
 
 #include "elf64-target.h"
 

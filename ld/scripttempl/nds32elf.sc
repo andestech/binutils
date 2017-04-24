@@ -246,7 +246,6 @@ STACK="  .stack        ${RELOCATING-0}${RELOCATING+${STACK_ADDR}} :
     *(.stack)
   }"
 
-TEXT_START_ADDR="SEGMENT_START(\"text-segment\", ${TEXT_START_ADDR})"
 SHLIB_TEXT_START_ADDR="SEGMENT_START(\"text-segment\", ${SHLIB_TEXT_START_ADDR:-0})"
 
 if [ -z "$SEPARATE_CODE" ]; then
@@ -322,6 +321,9 @@ eval $COMBRELOCCAT <<EOF
   .rela.init    ${RELOCATING-0} : { *(.rela.init) }
   .rel.text     ${RELOCATING-0} : { *(.rel.text${RELOCATING+ .rel.text.* .rel.gnu.linkonce.t.*}) }
   .rela.text    ${RELOCATING-0} : { *(.rela.text${RELOCATING+ .rela.text.* .rela.gnu.linkonce.t.*}) }
+  
+  ${RELOCATING+PROVIDE (__rel_dyn_start = .);}
+
   .rel.fini     ${RELOCATING-0} : { *(.rel.fini) }
   .rela.fini    ${RELOCATING-0} : { *(.rela.fini) }
   .rel.${RODATA_NAME}   ${RELOCATING-0} : { *(.rel.${RODATA_NAME}${RELOCATING+ .rel.${RODATA_NAME}.* .rel.gnu.linkonce.r.*}) }
@@ -389,6 +391,9 @@ cat >> ldscripts/dyntmp.$$ <<EOF
       ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}}
     }
   ${OTHER_PLT_RELOC_SECTIONS}
+
+  ${RELOCATING+PROVIDE (__rel_dyn_end = .);}
+
 EOF
 
 emit_dyn()
@@ -421,7 +426,7 @@ cat <<EOF
   .text         ${RELOCATING-0} :
   {
     ${RELOCATING+${TEXT_START_SYMBOLS}}
-    ${RELOCATING+*(.text.unlikely .text.*_unlikely .text.unlikely.*)}
+    ${RELOCATING+*(.text.unlikely .text.*_unlikely)}
     ${RELOCATING+*(.text.exit .text.exit.*)}
     ${RELOCATING+*(.text.startup .text.startup.*)}
     ${RELOCATING+*(.text.hot .text.hot.*)}
