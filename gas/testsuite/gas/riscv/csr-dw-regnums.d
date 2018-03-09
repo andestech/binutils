@@ -254,7 +254,7 @@ Contents of the .* section:
   DW_CFA_offset_extended_sf: r4995 \(mibound\) at cfa\+3596
   DW_CFA_offset_extended_sf: r4996 \(mdbase\) at cfa\+3600
   DW_CFA_offset_extended_sf: r4997 \(mdbound\) at cfa\+3604
-  DW_CFA_offset_extended_sf: r4896 \(mucounteren\) at cfa\+3200
+  DW_CFA_offset_extended_sf: r4896 \(mcountinhibit\) at cfa\+3200
   DW_CFA_offset_extended_sf: r4897 \(mscounteren\) at cfa\+3204
   DW_CFA_offset_extended_sf: r4898 \(mhcounteren\) at cfa\+3208
   DW_CFA_offset_extended_sf: r4163 \(utval\) at cfa\+268

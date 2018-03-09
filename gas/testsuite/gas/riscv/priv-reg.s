@@ -195,7 +195,7 @@
 	csr mhpmcounter30h
 	csr mhpmcounter31h
 
-	csr mucounteren
+	csr mcountinhibit
 	csr mscounteren
 	csr mhcounteren
 
@@ -275,3 +275,6 @@
 	csr vcsr
 	csr vl
 	csr vtype
+
+	# Scalar crypto
+	csr seed		# 0x015, Entropy Source
