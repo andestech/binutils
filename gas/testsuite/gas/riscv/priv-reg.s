@@ -195,7 +195,7 @@
 	csr mhpmcounter30h
 	csr mhpmcounter31h
 
-	csr mucounteren
+	csr mcountinhibit
 	csr mscounteren
 	csr mhcounteren
 
