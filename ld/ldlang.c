@@ -7404,6 +7404,7 @@ lang_process (void)
       if (plugin_call_all_symbols_read ())
 	einfo (_("%F%P: %s: plugin reported error after all symbols read\n"),
 	       plugin_error_plugin ());
+      link_info.lto_all_symbols_read = TRUE;
       /* Open any newly added files, updating the file chains.  */
       open_input_bfds (*added.tail, OPEN_BFD_NORMAL);
       /* Restore the global list pointer now they have all been added.  */
@@ -7757,6 +7758,13 @@ lang_add_data (int type, union etree_union *exp)
   new_stmt = new_stat (lang_data_statement, stat_ptr);
   new_stmt->exp = exp;
   new_stmt->type = type;
+}
+
+void
+lang_add_ict_entry (bfd_vma index, const char *name, union etree_union *exp)
+{
+  ASSERT (exp->type.node_class == etree_value);
+  andes_ict_sym_list_add (index, name, exp->value.value);
 }
 
 /* Create a new reloc statement.  RELOC is the BFD relocation type to
