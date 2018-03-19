@@ -77,6 +77,8 @@ enum
   NASM_ATTR_SATURATION_EXT	= 0x0400000,
   NASM_ATTR_PCREL		= 0x0800000,
   NASM_ATTR_GPREL		= 0x1000000,
+  NASM_ATTR_DSP_ISAEXT		= 0x2000000,
+  NASM_ATTR_ZOL			= (1 << 26),
 
   /* Attributes for relocations.  */
   NASM_ATTR_HI20		= 0x10000000,
@@ -84,22 +86,30 @@ enum
   NASM_ATTR_LO20		= 0x40000000,
 
   /* Attributes for registers.  */
-  NASM_ATTR_RDREG		= 0x000100
+  NASM_ATTR_RDREG		= 0x000100,
+
 };
+
+#define NDS32_CORE_COUNT	6
+#define NDS32_MAIN_CORE		0
+#define NDS32_ACE		1
+#define NDS32_COP0		2
+#define NDS32_COP1		3
+#define NDS32_COP2		4
+#define NDS32_COP3		5
 
 enum
 {
-  /* This is a field (operand) of just a separator char.  */
-  SYN_FIELD = 0x100,
-
   /* This operand is used for input or output.  (define or use)  */
-  SYN_INPUT = 0x1000,
-  SYN_OUTPUT = 0x2000,
-  SYN_LOPT = 0x4000,
-  SYN_ROPT = 0x8000,
+  SYN_INPUT = 0x10000,
+  SYN_OUTPUT = 0x20000,
+  SYN_LOPT = 0x40000,
+  SYN_ROPT = 0x80000,
 
-  /* Hardware resources.  */
-  HW_GPR = 0,
+  /* Hardware resources:
+     Current set up allows up to 256 resources for each class
+     defined above.  */
+  HW_GPR = NDS32_MAIN_CORE << 8,
   HW_USR,
   HW_DXR,
   HW_SR,
@@ -128,14 +138,20 @@ enum
   HW_AEXT_ARIDX,
   HW_AEXT_ARIDX2,
   HW_AEXT_ARIDXI,
+  HW_AEXT_ARIDXI_MX,
   _HW_LAST,
   /* TODO: Maybe we should add a new type to distinguish address and
-	   const int.  Only the former allows symbols and relocations.  */
-  HW_INT,
+     const int.  Only the former allows symbols and relocations.  */
+  HW_ACE_BASE = NDS32_ACE << 8,
+  HW_COP0_BASE = NDS32_COP0 << 8,
+  HW_COP1_BASE = NDS32_COP1 << 8,
+  HW_COP2_BASE = NDS32_COP2 << 8,
+  HW_COP3_BASE = NDS32_COP3 << 8,
+  HW_INT = 0x1000,
   HW_UINT
 };
 
-/* for audio-extension.  */
+/* For audio-extension.  */
 enum
 {
   N32_AEXT_AMADD = 0,
@@ -159,7 +175,7 @@ enum
   N32_AEXT_AMBBS,
   N32_AEXT_AMBTS,
   N32_AEXT_AMTBS,
-  N32_AEXT_AMTTS
+  N32_AEXT_AMTTS,
 };
 
 /* Macro for instruction attribute.  */
@@ -212,7 +228,7 @@ typedef struct nds32_opcode
   struct nds32_opcode *next;
 
   /* TODO: Extra constrains and verification.
-	   For example, `mov55 $sp, $sp' is not allowed in v3.  */
+     For example, `mov55 $sp, $sp' is not allowed in v3.  */
 } opcode_t;
 
 typedef struct nds32_asm_insn
@@ -266,6 +282,11 @@ typedef struct nds32_field
 
 extern void nds32_assemble (nds32_asm_desc_t *, nds32_asm_insn_t *, char *);
 extern void nds32_asm_init (nds32_asm_desc_t *, int);
+extern int nds32_parse_udi (const char *);
+extern int nds32_parse_cop0 (const char *);
+extern int nds32_parse_cop1 (const char *);
+extern int nds32_parse_cop2 (const char *);
+extern int nds32_parse_cop3 (const char *);
 
 #define OP6(op6)	(N32_OP6_ ## op6 << 25)
 
@@ -277,6 +298,9 @@ extern void nds32_asm_init (nds32_asm_desc_t *, int);
 #define SIMD(sub)	(OP6 (SIMD) | N32_SIMD_ ## sub)
 #define ALU1(sub)	(OP6 (ALU1) | N32_ALU1_ ## sub)
 #define ALU2(sub)	(OP6 (ALU2) | N32_ALU2_ ## sub)
+#define ALU2_1(sub)	(OP6 (ALU2) | N32_BIT (6) | N32_ALU2_ ## sub)
+#define ALU2_2(sub)	(OP6 (ALU2) | N32_BIT (7) | N32_ALU2_ ## sub)
+#define ALU2_3(sub)	(OP6 (ALU2) | N32_BIT (6) | N32_BIT (7) | N32_ALU2_ ## sub)
 #define MISC(sub)	(OP6 (MISC) | N32_MISC_ ## sub)
 #define MEM(sub)	(OP6 (MEM) | N32_MEM_ ## sub)
 #define FPU_RA_IMMBI(sub)	(OP6 (sub) | N32_BIT (12))

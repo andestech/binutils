@@ -592,6 +592,9 @@ disassembler_usage (FILE *stream ATTRIBUTE_UNUSED)
 #ifdef ARCH_wasm32
   print_wasm32_disassembler_options (stream);
 #endif
+#ifdef ARCH_nds32
+  print_nds32_disassembler_options (stream);
+#endif
 
   return;
 }
@@ -675,6 +678,11 @@ disassemble_init_for_target (struct disassemble_info * info)
 #ifdef ARCH_s390
     case bfd_arch_s390:
       disassemble_init_s390 (info);
+      break;
+#endif
+#ifdef ARCH_nds32
+    case bfd_arch_nds32:
+      disassemble_init_nds32 (info);
       break;
 #endif
     default:

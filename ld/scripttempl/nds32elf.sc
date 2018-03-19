@@ -185,7 +185,7 @@ test "${LARGE_SECTIONS}" = "yes" && LARGE_SECTIONS="
     *(.ldata${RELOCATING+ .ldata.* .gnu.linkonce.l.*})
     ${RELOCATING+. = ALIGN(. != 0 ? ${ALIGNMENT} : 1);}
   }"
-if test "${ENABLE_INITFINI_ARRAY}" = "yes"; then
+if test "${ENABLE_INITFINI_ARRAY}" = "no"; then
   SORT_INIT_ARRAY="KEEP (*(SORT_BY_INIT_PRIORITY(.init_array.*) SORT_BY_INIT_PRIORITY(.ctors.*)))"
   SORT_FINI_ARRAY="KEEP (*(SORT_BY_INIT_PRIORITY(.fini_array.*) SORT_BY_INIT_PRIORITY(.dtors.*)))"
   CTORS_IN_INIT_ARRAY="EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o $OTHER_EXCLUDE_FILES) .ctors"
@@ -335,6 +335,9 @@ eval $COMBRELOCCAT <<EOF
   .rela.init    ${RELOCATING-0} : { *(.rela.init) }
   .rel.text     ${RELOCATING-0} : { *(.rel.text${RELOCATING+ .rel.text.* .rel.gnu.linkonce.t.*}) }
   .rela.text    ${RELOCATING-0} : { *(.rela.text${RELOCATING+ .rela.text.* .rela.gnu.linkonce.t.*}) }
+
+  ${RELOCATING+PROVIDE (__rel_dyn_start = .);}
+
   .rel.fini     ${RELOCATING-0} : { *(.rel.fini) }
   .rela.fini    ${RELOCATING-0} : { *(.rela.fini) }
   .rel.${RODATA_NAME}   ${RELOCATING-0} : { *(.rel.${RODATA_NAME}${RELOCATING+ .rel.${RODATA_NAME}.* .rel.gnu.linkonce.r.*}) }
@@ -402,6 +405,9 @@ cat >> ldscripts/dyntmp.$$ <<EOF
       ${IREL_IN_PLT+${RELOCATING+${CREATE_SHLIB-PROVIDE_HIDDEN (${USER_LABEL_PREFIX}__rela_iplt_end = .);}}}
     }
   ${OTHER_PLT_RELOC_SECTIONS}
+
+  ${RELOCATING+PROVIDE (__rel_dyn_end = .);}
+
 EOF
 
 emit_dyn()

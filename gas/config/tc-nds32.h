@@ -24,13 +24,28 @@
 
 #include "bfd_stdint.h"
 
+/* Enum mapping symbol.  */
+enum mstate
+{
+  MAP_UNDEFINED = 0,	/* Must be zero, for seginfo in new sections.  */
+  MAP_DATA,
+  MAP_CODE,
+};
+#define TC_SEGMENT_INFO_TYPE struct nds32_segment_info_type
+
+/* For mapping symbol.  */
+struct nds32_segment_info_type
+{
+  enum mstate mapstate;
+};
+
 #define LISTING_HEADER \
   (target_big_endian ? "NDS32 GAS" : "NDS32 GAS Little Endian")
 
 /* The target BFD architecture.  */
 #define TARGET_ARCH		bfd_arch_nds32
 
-/* mapping to mach_table[5] */
+/* mapping to mach_table[5]  */
 #define ISA_V1      bfd_mach_n1h
 #define ISA_V2      bfd_mach_n1h_v2
 #define ISA_V3      bfd_mach_n1h_v3
@@ -42,29 +57,28 @@
 #define TARGET_BYTES_BIG_ENDIAN	1
 #endif
 
-/* as.c.  */
-/* Extend GAS command line option handling capability.  */
+/* as.c  */
+/* Extend GAS command line option handling capability  */
 extern int nds32_parse_option (int, const char *);
 extern void nds32_after_parse_args (void);
 /* The endianness of the target format may change based on command
    line arguments.  */
-extern const char * nds32_target_format (void);
-
+extern const char *nds32_target_format (void);
 #define md_parse_option(optc, optarg)	nds32_parse_option (optc, optarg)
 #define md_after_parse_args()		nds32_after_parse_args ()
 #define TARGET_FORMAT nds32_target_format()
 
-/* expr.c */
+/* expr.c  */
 extern int nds32_parse_name (char const *, expressionS *, enum expr_mode, char *);
 extern bfd_boolean nds32_allow_local_subtract (expressionS *, expressionS *, segT);
 #define md_parse_name(name, exprP, mode, nextcharP) \
 	nds32_parse_name (name, exprP, mode, nextcharP)
 #define md_allow_local_subtract(lhs,rhs,sect)	nds32_allow_local_subtract (lhs, rhs, sect)
 
-/* dwarf2dbg.c.  */
+/* dwarf2dbg.c  */
 #define DWARF2_USE_FIXED_ADVANCE_PC		1
 
-/* write.c.  */
+/* write.c  */
 extern long nds32_pcrel_from_section (struct fix *, segT);
 extern bfd_boolean nds32_fix_adjustable (struct fix *);
 extern void nds32_frob_file (void);
@@ -73,14 +87,13 @@ extern void nds32_frob_file_before_fix (void);
 extern void elf_nds32_final_processing (void);
 extern int nds32_validate_fix_sub (struct fix *, segT);
 extern int nds32_force_relocation (struct fix *);
-extern void nds32_set_section_relocs (asection *, arelent ** , unsigned int);
+extern void nds32_set_section_relocs (asection *, arelent **, unsigned int);
 
 /* Fill in rs_align_code fragments.  TODO: Review this.  */
 extern void nds32_handle_align (fragS *);
 extern int nds32_relax_frag (segT, fragS *, long);
 extern int tc_nds32_regname_to_dw2regnum (char *);
 extern void tc_nds32_frame_initial_instructions (void);
-
 #define MD_PCREL_FROM_SECTION(fix, sect)	nds32_pcrel_from_section (fix, sect)
 #define TC_FINALIZE_SYMS_BEFORE_SIZE_SEG	0
 #define tc_fix_adjustable(FIX)			nds32_fix_adjustable (FIX)
@@ -103,7 +116,7 @@ extern void tc_nds32_frame_initial_instructions (void);
 #define md_relax_frag(segment, fragP, stretch)	nds32_relax_frag (segment, fragP, stretch)
 #define WORKING_DOT_WORD			/* We don't need to handle .word strangely.  */
 /* Using to chain fixup with previous fixup.  */
-#define TC_FIX_TYPE struct fix *
+#define TC_FIX_TYPE struct fix*
 #define TC_INIT_FIX_DATA(fixP)		\
   do					\
     {					\
@@ -111,8 +124,8 @@ extern void tc_nds32_frame_initial_instructions (void);
     }					\
   while (0)
 
-/* read.c.  */
-/* Extend GAS macro handling capability.  */
+/* read.c  */
+/* Extend GAS macro handling capability  */
 extern void nds32_macro_start (void);
 extern void nds32_macro_end (void);
 extern void nds32_macro_info (void *);
@@ -128,7 +141,6 @@ extern void nds32_check_label (symbolS *);
 extern void nds32_frob_label (symbolS *);
 extern void nds32_pre_do_align (int, char *, int, int);
 extern void nds32_do_align (int);
-
 #define md_macro_start()			nds32_macro_start ()
 #define md_macro_end()				nds32_macro_end ()
 #define md_macro_info(args)			nds32_macro_info (args)
@@ -143,7 +155,7 @@ extern void nds32_do_align (int);
 #define md_do_align(N, FILL, LEN, MAX, LABEL)	\
   nds32_pre_do_align (N, FILL, LEN, MAX);	\
   if ((N) > 1 && (subseg_text_p (now_seg)	\
-      || strncmp (now_seg->name, ".gcc_except_table", sizeof(".gcc_except_table") - 1) == 0)) \
+      || strncmp (now_seg->name, ".gcc_except_table", sizeof (".gcc_except_table") - 1) == 0)) \
     nds32_do_align (N);				\
   goto LABEL;
 #define md_elf_section_change_hook()		nds32_elf_section_change_hook ()
@@ -151,7 +163,7 @@ extern void nds32_do_align (int);
 #define md_cleanup()				nds32_cleanup ()
 #define LOCAL_LABELS_FB				1 /* Permit temporary numeric labels.  */
 
-/* frags.c.  */
+/* frags.c  */
 
 enum FRAG_ATTR
 {
@@ -161,7 +173,8 @@ enum FRAG_ATTR
   NDS32_FRAG_LABEL = 0x8,
   NDS32_FRAG_FINAL = 0x10,
   NDS32_FRAG_RELAXABLE_BRANCH = 0x20,
-  NDS32_FRAG_ALIGN = 0x40
+  NDS32_FRAG_ALIGN = 0x40,
+  NDS32_FRAG_ICT_BRANCH = 0x80
 };
 
 struct nds32_frag_type
@@ -231,7 +244,11 @@ enum nds32_ramp
   NDS32_FIX = (1 << 7),
   NDS32_ADDEND = (1 << 8),
   NDS32_SYM = (1 << 9),
-  NDS32_PCREL = (1 << 10)
+  NDS32_PCREL = (1 << 10),
+  NDS32_PTR_PATTERN = (1 << 11),
+  NDS32_PTR_MULTIPLE = (1 << 12),
+  NDS32_GROUP = (1 << 13),
+  NDS32_SYM_DESC_MEM = (1 << 14)
 };
 
 typedef struct nds32_relax_fixup_info
@@ -255,7 +272,7 @@ typedef struct nds32_cond_field
 #define NDS32_MAXCHAR 20
 /* In current, the max extended number of instruction for one pseudo instruction
    is 4, but its number of relocation may be 12.  */
-#define MAX_RELAX_NUM 4
+#define MAX_RELAX_NUM 6
 #define MAX_RELAX_FIX 12
 
 typedef struct nds32_relax_info
@@ -275,8 +292,18 @@ typedef struct nds32_relax_info
 enum nds32_relax_hint_type
 {
   NDS32_RELAX_HINT_NONE = 0,
-  NDS32_RELAX_HINT_LA,
-  NDS32_RELAX_HINT_LS
+  NDS32_RELAX_HINT_LA_FLSI,
+  NDS32_RELAX_HINT_LALS,
+  NDS32_RELAX_HINT_LA_PLT,
+  NDS32_RELAX_HINT_LA_GOT,
+  NDS32_RELAX_HINT_LA_GOTOFF,
+  NDS32_RELAX_HINT_TLS_START = 0x100,
+  NDS32_RELAX_HINT_TLS_LE_LS,
+  NDS32_RELAX_HINT_TLS_IE_LS,
+  NDS32_RELAX_HINT_TLS_IE_LA,
+  NDS32_RELAX_HINT_TLS_IEGP_LA,
+  NDS32_RELAX_HINT_TLS_DESC_LS,
+  NDS32_RELAX_HINT_ICT_LA,
 };
 
 struct nds32_relax_hint_table
@@ -287,4 +314,4 @@ struct nds32_relax_hint_table
   nds32_relax_fixup_info_t relax_fixup[MAX_RELAX_FIX];
 };
 
-#endif /* TC_NDS32 */
+#endif /* TC_NDS32  */

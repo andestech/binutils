@@ -17178,6 +17178,53 @@ do
 
     . ${srcdir}/configure.tgt
 
+    case ${target_cpu} in
+      nds32*)
+	case ${targ} in
+	  *-*-linux*)
+
+$as_echo "#define NDS32_LINUX_TOOLCHAIN 1" >>confdefs.h
+
+	  ;;
+	esac
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --enable-ifc-ext" >&5
+$as_echo_n "checking for default configuration of --enable-ifc-ext... " >&6; }
+	if test "x${enable_ifc_ext}" == xyes; then
+
+$as_echo "#define NDS32_IFC_EXT 1" >>confdefs.h
+
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_ifc_ext" >&5
+$as_echo "$enable_ifc_ext" >&6; }
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --enable-ex9-ext" >&5
+$as_echo_n "checking for default configuration of --enable-ex9-ext... " >&6; }
+	if test "x${enable_ex9_ext}" == xyes; then
+
+$as_echo "#define NDS32_EX9_EXT 1" >>confdefs.h
+
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_ex9_ext" >&5
+$as_echo "$enable_ex9_ext" >&6; }
+
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for default configuration of --enable-16m-addr" >&5
+$as_echo_n "checking for default configuration of --enable-16m-addr... " >&6; }
+	if test "x${enable_16m_addr}" == xyes; then
+	  case ${targ} in
+	    nds32*le-*-elf*)
+	      targ_emul=nds32elf16m
+	    ;;
+	    nds32*be-*-elf*)
+	      targ_emul=nds32belf16m
+	    ;;
+	  esac
+	fi
+	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $enable_16m-addr" >&5
+$as_echo "$enable_16m-addr" >&6; }
+      ;;
+    esac
+
     if test "$targ" = "$target"; then
       EMUL=$targ_emul
     fi

@@ -115,7 +115,7 @@ fi
 if test x"$LDEMUL_AFTER_PARSE" != xgld"$EMULATION_NAME"_after_parse; then
 fragment <<EOF
 
-static void
+ATTRIBUTE_UNUSED static void
 gld${EMULATION_NAME}_after_parse (void)
 {
   if (bfd_link_pie (&link_info))

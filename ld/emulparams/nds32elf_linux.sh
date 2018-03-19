@@ -31,5 +31,6 @@ fi
 GENERATE_SHLIB_SCRIPT=yes
 GENERATE_PIE_SCRIPT=yes
 
-# Use external linker script files.
-COMPILE_IN=no
+# Instruct genscripts.sh not to compile scripts in by COMPILE_IN
+# in order to use external linker scripts files.
+EMULATION_LIBPATH=

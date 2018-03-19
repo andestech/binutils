@@ -1260,11 +1260,13 @@ case "${targ}" in
   nds32*le-*-linux*)
     targ_defvec=nds32_elf32_linux_le_vec
     targ_selvecs=nds32_elf32_linux_be_vec
+    targ_cflags=-DNDS32_LINUX_TOOLCHAIN
     ;;
 
   nds32*be-*-linux*)
     targ_defvec=nds32_elf32_linux_be_vec
     targ_selvecs=nds32_elf32_linux_le_vec
+    targ_cflags=-DNDS32_LINUX_TOOLCHAIN
     ;;
 
   nds32*le-*-*)

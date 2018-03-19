@@ -22,25 +22,23 @@
 
 fragment <<EOF
 
+#include "libbfd.h"
 #include "elf-bfd.h"
 #include "elf/nds32.h"
-#include "bfd_stdint.h"
 #include "elf32-nds32.h"
+#include "bfd_stdint.h"
 
 static int relax_fp_as_gp = 1;		/* --mrelax-omit-fp  */
 static int eliminate_gc_relocs = 0;	/* --meliminate-gc-relocs  */
 static FILE *sym_ld_script = NULL;	/* --mgen-symbol-ld-script=<file>  */
+static int hyper_relax = 1;	/* --mhyper-relax  */
 /* Disable if linking a dynamically linked executable.  */
 static int load_store_relax = 1;
 static int target_optimize = 0;	/* Switch optimization.  */
 static int relax_status = 0;	/* Finished optimization.  */
 static int relax_round = 0;		/* Going optimization.  */
-static FILE *ex9_export_file = NULL;	/* --mexport-ex9=<file>  */
-static FILE *ex9_import_file = NULL;	/* --mimport-ex9=<file>  */
-static int update_ex9_table = 0;	/* --mupdate-ex9.  */
-static int ex9_limit = 511;
-static bfd_boolean ex9_loop_aware = FALSE;	/* Ignore ex9 if inside a loop.  */
-static bfd_boolean ifc_loop_aware = FALSE;	/* Ignore ifc if inside a loop.  */
+static int tls_desc_trampoline = 0;	/* --m[no]tlsdesc-trampoline.  */
+static char *set_output_abi = NULL;	/* --mabi.  */
 
 /* Save the target options into output bfd to avoid using to many global
    variables. Do this after the output has been created, but before
@@ -51,8 +49,8 @@ nds32_elf_create_output_section_statements (void)
   if (strstr (bfd_get_target (link_info.output_bfd), "nds32") == NULL)
     {
       /* Check the output target is nds32.  */
-      einfo (_("%F%P: error: cannot change output format whilst "
-	       "linking %s binaries\n"), "NDS32");
+      einfo (_("%F%X%P: error: Cannot change output format whilst "
+	       "linking NDS32 binaries.\n"));
       return;
     }
 
@@ -61,39 +59,41 @@ nds32_elf_create_output_section_statements (void)
 				     sym_ld_script,
 				     load_store_relax,
 				     target_optimize, relax_status, relax_round,
-				     ex9_export_file, ex9_import_file,
-				     update_ex9_table, ex9_limit,
-				     ex9_loop_aware, ifc_loop_aware);
+				     hyper_relax,
+				     tls_desc_trampoline,
+				     set_output_abi);
 }
 
 static void
 nds32_elf_after_parse (void)
 {
+#ifdef NDS32_LINUX_TOOLCHAIN
+  if (RELAXATION_ENABLED)
+    {
+      einfo ("%P: warning: The relaxation isn't supported yet.\n");
+      DISABLE_RELAXATION;
+    }
+#endif
+
   if (bfd_link_relocatable (&link_info))
     DISABLE_RELAXATION;
 
   if (!RELAXATION_ENABLED)
     {
-      target_optimize = target_optimize & (!NDS32_RELAX_JUMP_IFC_ON);
-      target_optimize = target_optimize & (!NDS32_RELAX_EX9_ON);
+      target_optimize &= ~(NDS32_RELAX_IFC_ON | NDS32_RELAX_EX9_ON);
       relax_fp_as_gp = 0;
     }
 
-  if (ex9_import_file != NULL)
-    {
-      ex9_export_file = NULL;
-      target_optimize = target_optimize & (!NDS32_RELAX_EX9_ON);
-    }
-  else
-    update_ex9_table = 0;
-
   if (bfd_link_pic (&link_info))
     {
-      target_optimize = target_optimize & (!NDS32_RELAX_JUMP_IFC_ON);
-      target_optimize = target_optimize & (!NDS32_RELAX_EX9_ON);
+      target_optimize &= ~(NDS32_RELAX_IFC_ON | NDS32_RELAX_EX9_ON);
     }
 
-  gld${EMULATION_NAME}_after_parse ();
+  after_parse_default ();
+
+  /* Backward compatible for linker script output_format.  */
+  if (output_target && strcmp (output_target, "elf32-nds32") == 0)
+    output_target = default_target;
 }
 
 static void
@@ -107,10 +107,15 @@ nds32_elf_after_open (void)
      We may try to merge object files with different architecture together.  */
   for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
     {
-      if (arch_ver == (unsigned int)-1 && E_N1_ARCH != (elf_elfheader (abfd)->e_flags & EF_NDS_ARCH))
+      if (arch_ver == (unsigned int)-1
+	  && E_N1_ARCH != (elf_elfheader (abfd)->e_flags & EF_NDS_ARCH))
 	arch_ver = elf_elfheader (abfd)->e_flags & EF_NDS_ARCH ;
 
-      if (abi_ver == (unsigned int)-1)
+      if (set_output_abi != NULL)
+	{
+	  /* do not check ABI.  */
+	}
+      else if (abi_ver == (unsigned int)-1)
 	{
 	  /* Initialize ABI version, if not ABI0.
 	     (OS uses empty file to create empty ELF with ABI0).  */
@@ -120,68 +125,34 @@ nds32_elf_after_open (void)
       else if ((elf_elfheader (abfd)->e_flags & EF_NDS_ABI) != 0
 	       && abi_ver != (elf_elfheader (abfd)->e_flags & EF_NDS_ABI))
 	{
+	  asection *section = NULL;
+	  bfd_byte *contents = NULL;
+	  section = bfd_get_section_by_name (abfd, ".note.v2abi_compatible");
+	  if (section)
+	    bfd_get_full_section_contents (abfd, section, &contents);
+
 	  /* Incompatible objects.  */
-	  einfo (_("%F%P: %pB: ABI version of object files mismatched\n"),
-		 abfd);
+	  if ((contents == NULL)
+	      || bfd_getb32 (contents) != 1
+	      || abi_ver != E_NDS_ABI_V2FP_PLUS)
+	    einfo (_("%F%B: ABI version of object files mismatched\n"), abfd);
 	}
 
-#if defined NDS32_EX9_EXT
-      /* Append .ex9.itable section in the last input object file.  */
-      if (abfd->link_next == NULL && (target_optimize & NDS32_RELAX_EX9_ON))
-	{
-	  asection *itable;
-	  struct bfd_link_hash_entry *h;
-	  itable = bfd_make_section_with_flags (abfd, ".ex9.itable",
-						SEC_CODE | SEC_ALLOC | SEC_LOAD
-						| SEC_HAS_CONTENTS | SEC_READONLY
-						| SEC_IN_MEMORY | SEC_KEEP);
-	  if (itable)
-	    {
-	      itable->gc_mark = 1;
-	      itable->alignment_power = 2;
-	      itable->size = 0x1000;
-	      itable->contents = bfd_zalloc (abfd, itable->size);
-
-	      /* Add a symbol in the head of ex9.itable to objdump clearly.  */
-	      h = bfd_link_hash_lookup (link_info.hash, "_EX9_BASE_",
-					FALSE, FALSE, FALSE);
-	      _bfd_generic_link_add_one_symbol
-		(&link_info, link_info.output_bfd, "_EX9_BASE_",
-		 BSF_GLOBAL | BSF_WEAK, itable, 0, (const char *) NULL, FALSE,
-		 get_elf_backend_data (link_info.output_bfd)->collect, &h);
-	    }
-	}
-#endif
+      /* Append target needed section in the last input object file.  */
+      if (abfd->link.next == NULL)
+	bfd_elf32_nds32_append_section (&link_info, abfd);
     }
 
   /* Check object files if the target is dynamic linked executable
      or shared object.  */
   if (elf_hash_table (&link_info)->dynamic_sections_created
-      || bfd_link_pic (&link_info))
+      || bfd_link_pic (&link_info) || bfd_link_pie (&link_info))
     {
-      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
-	{
-	  if (!(elf_elfheader (abfd)->e_flags & E_NDS32_HAS_PIC))
-	    {
-	      /* Non-PIC object file is used.  */
-	      if (bfd_link_pic (&link_info))
-		{
-		  /* For PIE or shared object, all input must be PIC.  */
-		  einfo (_("%P: %pB: must use -fpic to compile this file "
-			   "for shared object or PIE\n"), abfd);
-		}
-	      else
-		{
-		  /* Dynamic linked executable with SDA and non-PIC.
-		     Turn off load/store relaxtion.  */
-		  /* TODO: This may support in the future.  */
-		  load_store_relax = 0 ;
-		  relax_fp_as_gp = 0;
-		}
-	    }
-	}
-      /* Turn off relax when building shared object or PIE
-	 until we can support their relaxation.  */
+      /* Dynamic linked executable with SDA and non-PIC.
+	 Turn off load/store relaxtion.  */
+      /* TODO: This may support in the future.  */
+      load_store_relax = 0 ;
+      relax_fp_as_gp = 0;
     }
 
   /* Call the standard elf routine.  */
@@ -191,19 +162,26 @@ nds32_elf_after_open (void)
 static void
 nds32_elf_after_allocation (void)
 {
-  if (target_optimize & NDS32_RELAX_EX9_ON
-      || (ex9_import_file != NULL && update_ex9_table == 1))
-    {
-      /* Initialize ex9 hash table.  */
-      if (!nds32_elf_ex9_init ())
-	return;
-    }
+  struct bfd_link_hash_entry *h;
 
   /* Call default after allocation callback.
      1. This is where relaxation is done.
      2. It calls gld${EMULATION_NAME}_map_segments to build ELF segment table.
      3. Any relaxation requires relax being done must be called after it.  */
   gld${EMULATION_NAME}_after_allocation ();
+
+  /* Add a symbol for linker script check the max size.  */
+  if (link_info.output_bfd->sections)
+    {
+      h = bfd_link_hash_lookup (link_info.hash, "_RELAX_END_",
+				FALSE, FALSE, FALSE);
+      if (!h)
+	_bfd_generic_link_add_one_symbol
+	  (&link_info, link_info.output_bfd, "_RELAX_END_",
+	   BSF_GLOBAL | BSF_WEAK, link_info.output_bfd->sections,
+	   0, (const char *) NULL, FALSE,
+	   get_elf_backend_data (link_info.output_bfd)->collect, &h);
+    }
 }
 
 EOF
@@ -218,31 +196,19 @@ PARSE_AND_LIST_PROLOGUE='
 #define OPTION_REDUCE_FP_UPDATE		(OPTION_BASELINE + 4)
 #define OPTION_NO_REDUCE_FP_UPDATE	(OPTION_BASELINE + 5)
 #define OPTION_EXPORT_SYMBOLS		(OPTION_BASELINE + 6)
-
-/* These are only available to ex9.  */
-#if defined NDS32_EX9_EXT
-#define OPTION_EX9_BASELINE		320
-#define OPTION_EX9_TABLE		(OPTION_EX9_BASELINE + 1)
-#define OPTION_NO_EX9_TABLE		(OPTION_EX9_BASELINE + 2)
-#define OPTION_EXPORT_EX9		(OPTION_EX9_BASELINE + 3)
-#define OPTION_IMPORT_EX9		(OPTION_EX9_BASELINE + 4)
-#define OPTION_UPDATE_EX9		(OPTION_EX9_BASELINE + 5)
-#define OPTION_EX9_LIMIT		(OPTION_EX9_BASELINE + 6)
-#define OPTION_EX9_LOOP			(OPTION_EX9_BASELINE + 7)
-#endif
-
-/* These are only available to link-time ifc.  */
-#if defined NDS32_IFC_EXT
-#define OPTION_IFC_BASELINE		340
-#define OPTION_JUMP_IFC			(OPTION_IFC_BASELINE + 1)
-#define OPTION_NO_JUMP_IFC		(OPTION_IFC_BASELINE + 2)
-#define OPTION_IFC_LOOP			(OPTION_IFC_BASELINE + 3)
-#endif
+#define OPTION_HYPER_RELAX		(OPTION_BASELINE + 7)
+#define OPTION_TLSDESC_TRAMPOLINE	(OPTION_BASELINE + 8)
+#define OPTION_NO_TLSDESC_TRAMPOLINE	(OPTION_BASELINE + 9)
+#define OPTION_SET_ABI			(OPTION_BASELINE + 10)
 '
 PARSE_AND_LIST_LONGOPTS='
   { "mfp-as-gp", no_argument, NULL, OPTION_FP_AS_GP},
   { "mno-fp-as-gp", no_argument, NULL, OPTION_NO_FP_AS_GP},
   { "mexport-symbols", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
+  { "mhyper-relax", required_argument, NULL, OPTION_HYPER_RELAX},
+  { "mtlsdesc-trampoline", no_argument, NULL, OPTION_TLSDESC_TRAMPOLINE},
+  { "mno-tlsdesc-trampoline", no_argument, NULL, OPTION_NO_TLSDESC_TRAMPOLINE},
+  { "mabi", required_argument, NULL, OPTION_SET_ABI},
   /* These are deprecated options.  Remove them in the future.  */
   { "mrelax-reduce-fp-update", no_argument, NULL, OPTION_REDUCE_FP_UPDATE},
   { "mrelax-no-reduce-fp-update", no_argument, NULL, OPTION_NO_REDUCE_FP_UPDATE},
@@ -251,54 +217,18 @@ PARSE_AND_LIST_LONGOPTS='
   { "mrelax-omit-fp", no_argument, NULL, OPTION_FP_AS_GP},
   { "mrelax-no-omit-fp", no_argument, NULL, OPTION_NO_FP_AS_GP},
   { "mgen-symbol-ld-script", required_argument, NULL, OPTION_EXPORT_SYMBOLS},
-  /* These are specific optioins for ex9-ext support.  */
-#if defined NDS32_EX9_EXT
-  { "mex9", no_argument, NULL, OPTION_EX9_TABLE},
-  { "mno-ex9", no_argument, NULL, OPTION_NO_EX9_TABLE},
-  { "mexport-ex9", required_argument, NULL, OPTION_EXPORT_EX9},
-  { "mimport-ex9", required_argument, NULL, OPTION_IMPORT_EX9},
-  { "mupdate-ex9", no_argument, NULL, OPTION_UPDATE_EX9},
-  { "mex9-limit", required_argument, NULL, OPTION_EX9_LIMIT},
-  { "mex9-loop-aware", no_argument, NULL, OPTION_EX9_LOOP},
-#endif
-  /* These are specific optioins for ifc-ext support.  */
-#if defined NDS32_IFC_EXT
-  { "mifc", no_argument, NULL, OPTION_JUMP_IFC},
-  { "mno-ifc", no_argument, NULL, OPTION_NO_JUMP_IFC},
-  { "mifc-loop-aware", no_argument, NULL, OPTION_IFC_LOOP},
-#endif
 '
 PARSE_AND_LIST_OPTIONS='
   fprintf (file, _("\
-  --m[no-]fp-as-gp            Disable/enable fp-as-gp relaxation\n"));
-  fprintf (file, _("\
-  --mexport-symbols=FILE      Exporting symbols in linker script\n"));
-
-#if defined NDS32_EX9_EXT
-  fprintf (file, _("\
-  --m[no-]ex9                 Disable/enable link-time EX9 relaxation\n"));
-  fprintf (file, _("\
-  --mexport-ex9=FILE          Export EX9 table after linking\n"));
-  fprintf (file, _("\
-  --mimport-ex9=FILE          Import Ex9 table for EX9 relaxation\n"));
-  fprintf (file, _("\
-  --mupdate-ex9               Update existing EX9 table\n"));
-  fprintf (file, _("\
-  --mex9-limit=NUM            Maximum number of entries in ex9 table\n"));
-  fprintf (file, _("\
-  --mex9-loop-aware           Avoid generate EX9 instruction inside loop\n"));
-#endif
-
-#if defined NDS32_IFC_EXT
-  fprintf (file, _("\
-  --m[no-]ifc                 Disable/enable link-time IFC optimization\n"));
-  fprintf (file, _("\
-  --mifc-loop-aware           Avoid generate IFC instruction inside loop\n"));
-#endif
+  --m[no-]fp-as-gp            Disable/enable fp-as-gp relaxation\n\
+  --mexport-symbols=FILE      Exporting symbols in linker script\n\
+  --mhyper-relax=level        Adjust relax level (low|medium|high). default: medium\n\
+  --m[no-]tlsdesc-trampoline  Disable/enable TLS DESC trampoline\n\
+"));
 '
 PARSE_AND_LIST_ARGS_CASES='
   case OPTION_BASELINE:
-    einfo (_("%P: --mbaseline is not used anymore\n"));
+    einfo (_("%P: --mbaseline is not used anymore.\n"));
     break;
   case OPTION_ELIM_GC_RELOCS:
     eliminate_gc_relocs = 1;
@@ -309,11 +239,11 @@ PARSE_AND_LIST_ARGS_CASES='
     break;
   case OPTION_REDUCE_FP_UPDATE:
   case OPTION_NO_REDUCE_FP_UPDATE:
-    einfo (_("%P: --relax-[no-]reduce-fp-updat is not used anymore\n"));
+    einfo (_("%P: --relax-[no-]reduce-fp-updat is not used anymore.\n"));
     break;
   case OPTION_EXPORT_SYMBOLS:
     if (!optarg)
-      einfo (_("%P: missing file for --mexport-symbols\n"), optarg);
+      einfo (_("Missing file for --mexport-symbols.\n"), optarg);
 
     if(strcmp (optarg, "-") == 0)
       sym_ld_script = stdout;
@@ -321,65 +251,36 @@ PARSE_AND_LIST_ARGS_CASES='
       {
 	sym_ld_script = fopen (optarg, FOPEN_WT);
 	if(sym_ld_script == NULL)
-	  einfo (_("%F%P: cannot open map file %s: %E\n"), optarg);
+	  einfo (_("%P%F: cannot open map file %s: %E.\n"), optarg);
       }
     break;
-#if defined NDS32_EX9_EXT
-  case OPTION_EX9_TABLE:
-    target_optimize = target_optimize | NDS32_RELAX_EX9_ON;
-    break;
-  case OPTION_NO_EX9_TABLE:
-    target_optimize = target_optimize & (!NDS32_RELAX_EX9_ON);
-    break;
-  case OPTION_EXPORT_EX9:
+  case OPTION_HYPER_RELAX:
     if (!optarg)
-      einfo (_("%P: missing file for --mexport-ex9=<file>\n"));
+      einfo (_("Valid arguments to --mhyper-relax=(low|medium|high).\n"));
 
-    if(strcmp (optarg, "-") == 0)
-      ex9_export_file = stdout;
+    if (strcmp (optarg, "low") == 0)
+      hyper_relax = 0;
+    else if (strcmp (optarg, "medium") == 0)
+      hyper_relax = 1;
+    else if (strcmp (optarg, "high") == 0)
+      hyper_relax = 2;
     else
-      {
-	ex9_export_file = fopen (optarg, "wb");
-	if(ex9_export_file == NULL)
-	  einfo (_("%F%P: cannot open ex9 export file %s\n"), optarg);
-      }
-    break;
-  case OPTION_IMPORT_EX9:
-    if (!optarg)
-      einfo (_("%P: missing file for --mimport-ex9=<file>\n"));
+      einfo (_("Valid arguments to --mhyper-relax=(low|medium|high).\n"));
 
-    ex9_import_file = fopen (optarg, "rb+");
-    if(ex9_import_file == NULL)
-      einfo (_("%F%P: cannot open ex9 import file %s\n"), optarg);
+      break;
+  case OPTION_TLSDESC_TRAMPOLINE:
+    tls_desc_trampoline = 1;
     break;
-  case OPTION_UPDATE_EX9:
-    update_ex9_table = 1;
+  case OPTION_NO_TLSDESC_TRAMPOLINE:
+    tls_desc_trampoline = 0;
     break;
-  case OPTION_EX9_LIMIT:
-    if (optarg)
-      {
-	ex9_limit = atoi (optarg);
-	if (ex9_limit > 511 || ex9_limit < 1)
-	  einfo (_("%F%P: the range of ex9_limit must between 1 and 511\n"));
-      }
+  case OPTION_SET_ABI:
+    if (strcmp (optarg, "AABI") != 0
+	&& strcmp (optarg, "V2FP+") != 0)
+      einfo (_("Valid arguments to --mabi=(AABI|V2FP+).\n"));
+    else
+      set_output_abi = optarg;
     break;
-  case OPTION_EX9_LOOP:
-    target_optimize = target_optimize | NDS32_RELAX_EX9_ON;
-    ex9_loop_aware = 1;
-    break;
-#endif
-#if defined NDS32_IFC_EXT
-  case OPTION_JUMP_IFC:
-    target_optimize = target_optimize | NDS32_RELAX_JUMP_IFC_ON;
-    break;
-  case OPTION_NO_JUMP_IFC:
-    target_optimize = target_optimize & (!NDS32_RELAX_JUMP_IFC_ON);
-    break;
-  case OPTION_IFC_LOOP:
-    target_optimize = target_optimize | NDS32_RELAX_JUMP_IFC_ON;
-    ifc_loop_aware = 1;
-    break;
-#endif
 '
 LDEMUL_AFTER_OPEN=nds32_elf_after_open
 LDEMUL_AFTER_PARSE=nds32_elf_after_parse
