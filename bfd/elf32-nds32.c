@@ -7832,9 +7832,48 @@ nds32_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 		}
 
 	      p->count += 1;
+
+	      /* FIXME: Since eh_frame is readonly, R_NDS32_32_RELA
+		 reloc for eh_frame will cause shared library has
+		 TEXTREL entry in the dynamic section. This lead glibc
+		 testsuites to failure (bug-13092) and cause kernel fail
+		 (bug-11819).  I think the best solution is to replace
+		 absolute reloc with pc relative reloc in the eh_frame.
+		 To do that, we need to support the following issues:
+
+		 === For GCC ===
+		 * gcc/config/nds32/nds32.h: Define
+		 ASM_PREFERRED_EH_DATA_FORMAT to encode DW_EH_PE_pcrel
+		 and DW_EH_PE_sdata4 into DWARF exception header when
+		 option have '-fpic'.
+
+		 === For binutils ===
+		 * bfd/: Define new reloc R_NDS32_32_PCREL_RELA.
+		 * gas/config/tc-nds32.h: Define DIFF_EXPR_OK. This
+		 may break our nds DIFF mechanism, therefore, we
+		 must disable all linker relaxations to ensure
+		 correctness.
+		 * gas/config/tc-nds32.c (nds32_apply_fix): Replace
+		 R_NDS32_32_RELA with R_NDS32_32_PCREL_RELA, and
+		 do the necessary modification.
+
+		 Unfortunately, it still have some problems for nds32
+		 to support pc relative reloc in the eh_frame. So I use
+		 another solution to fix this issue.
+
+		 However, I find that ld always emit TEXTREL marker for
+		 R_NDS32_NONE relocs in rel.dyn. These none relocs are
+		 correspond to R_NDS32_32_RELA for .eh_frame section.
+		 It means that we always reserve redundant entries of rel.dyn
+		 for these relocs which actually do nothing in dynamic linker.
+
+		 Therefore, we regard these relocs as pc relative relocs
+		 here and increase the pc_count.  */
 	      if (ELF32_R_TYPE (rel->r_info) == R_NDS32_25_PCREL_RELA
 		  || ELF32_R_TYPE (rel->r_info) == R_NDS32_15_PCREL_RELA
-		  || ELF32_R_TYPE (rel->r_info) == R_NDS32_17_PCREL_RELA)
+		  || ELF32_R_TYPE (rel->r_info) == R_NDS32_17_PCREL_RELA
+		  || (r_type == R_NDS32_32_RELA
+		      && strcmp (sec->name, ".eh_frame") == 0))
 		p->pc_count += 1;
 	    }
 	  break;
