@@ -1224,10 +1224,15 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vmadc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMADCVVM, MASK_VMADCVVM, match_opcode, 0 },
 {"vmadc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMADCVXM, MASK_VMADCVXM, match_opcode, 0 },
 {"vmadc.vim",  0, {"V", 0},  "Vd,Vt,Vi,V0", MATCH_VMADCVIM, MASK_VMADCVIM, match_opcode, 0 },
+{"vmadc.vv",   0, {"V", 0},  "Vd,Vt,Vs", MATCH_VMADCVV, MASK_VMADCVV, match_opcode, 0 },
+{"vmadc.vx",   0, {"V", 0},  "Vd,Vt,s", MATCH_VMADCVX, MASK_VMADCVX, match_opcode, 0 },
+{"vmadc.vi",   0, {"V", 0},  "Vd,Vt,Vi", MATCH_VMADCVI, MASK_VMADCVI, match_opcode, 0 },
 {"vsbc.vvm",   0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VSBCVVM, MASK_VSBCVVM, match_opcode, 0 },
 {"vsbc.vxm",   0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VSBCVXM, MASK_VSBCVXM, match_opcode, 0 },
 {"vmsbc.vvm",  0, {"V", 0},  "Vd,Vt,Vs,V0", MATCH_VMSBCVVM, MASK_VMSBCVVM, match_opcode, 0 },
 {"vmsbc.vxm",  0, {"V", 0},  "Vd,Vt,s,V0", MATCH_VMSBCVXM, MASK_VMSBCVXM, match_opcode, 0 },
+{"vmsbc.vv",   0, {"V", 0},  "Vd,Vt,Vs", MATCH_VMSBCVV, MASK_VMSBCVV, match_opcode, 0 },
+{"vmsbc.vx",   0, {"V", 0},  "Vd,Vt,s", MATCH_VMSBCVX, MASK_VMSBCVX, match_opcode, 0 },
 
 {"vnot.v",     0, {"V", 0},  "Vd,VtVm", MATCH_VNOTV, MASK_VNOTV, match_opcode, INSN_ALIAS },
 
