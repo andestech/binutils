@@ -1255,8 +1255,10 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vmsge.vv",   0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLEVV, MASK_VMSLEVV, match_opcode, INSN_ALIAS },
 {"vmsgeu.vv",  0, {"V", 0},  "Vd,Vs,VtVm", MATCH_VMSLEUVV, MASK_VMSLEUVV, match_opcode, INSN_ALIAS },
 {"vmslt.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLEVI, MASK_VMSLEVI, match_opcode, INSN_ALIAS },
+{"vmsltu.vi",  0, {"V", 0},  "Vd,Vu,0Vm", MATCH_VMSNEVV, MASK_VMSNEVV, match_opcode, INSN_ALIAS },
 {"vmsltu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSLEUVI, MASK_VMSLEUVI, match_opcode, INSN_ALIAS },
 {"vmsge.vi",   0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGTVI, MASK_VMSGTVI, match_opcode, INSN_ALIAS },
+{"vmsgeu.vi",  0, {"V", 0},  "Vd,Vu,0Vm", MATCH_VMSEQVV, MASK_VMSEQVV, match_opcode, INSN_ALIAS },
 {"vmsgeu.vi",  0, {"V", 0},  "Vd,Vt,VkVm", MATCH_VMSGTUVI, MASK_VMSGTUVI, match_opcode, INSN_ALIAS },
 
 {"vmsge.vx",   0, {"V", 0}, "Vd,Vt,sVm", 0, (int) M_VMSGE, match_never, INSN_MACRO },
