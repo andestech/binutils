@@ -1949,6 +1949,7 @@ const struct riscv_opcode riscv_opcodes[] =
 {"vfwredosum.vs",0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDOSUMV, MASK_VFWREDOSUMV, match_opcode, 0},
 {"vfwredsum.vs", 0, {"V", "F", 0}, "Vd,Vt,VsVm", MATCH_VFWREDSUMV, MASK_VFWREDSUMV, match_opcode, 0},
 
+{"vmmv.m",     0, {"V", 0}, "Vd,Vu", MATCH_VMANDMM, MASK_VMANDMM, match_vs1_eq_vs2, INSN_ALIAS},
 {"vmcpy.m",    0, {"V", 0}, "Vd,Vu", MATCH_VMANDMM, MASK_VMANDMM, match_vs1_eq_vs2, INSN_ALIAS},
 {"vmclr.m",    0, {"V", 0}, "Vv", MATCH_VMXORMM, MASK_VMXORMM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
 {"vmset.m",    0, {"V", 0}, "Vv", MATCH_VMXNORMM, MASK_VMXNORMM, match_vd_eq_vs1_eq_vs2, INSN_ALIAS},
