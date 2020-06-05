@@ -533,7 +533,10 @@ riscv_csr_class_check (enum riscv_csr_class csr_class)
     {
     case CSR_CLASS_I: return riscv_subset_supports ("i");
     case CSR_CLASS_F: return riscv_subset_supports ("f");
-    case CSR_CLASS_V: return riscv_subset_supports ("v");
+    case CSR_CLASS_V:
+      return (riscv_subset_supports ("v")
+	      || riscv_subset_supports ("zvamo")
+	      || riscv_subset_supports ("zvlsseg"));
     case CSR_CLASS_I_32:
       return (xlen == 32 && riscv_subset_supports ("i"));
 
