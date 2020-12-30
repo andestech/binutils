@@ -88,6 +88,31 @@ START_RELOC_NUMBERS (elf_riscv_reloc_type)
   RELOC_NUMBER (R_RISCV_SET16, 55)
   RELOC_NUMBER (R_RISCV_SET32, 56)
   RELOC_NUMBER (R_RISCV_32_PCREL, 57)
+
+  RELOC_NUMBER (R_RISCV_ICT_HI20, 232)
+  RELOC_NUMBER (R_RISCV_ICT_LO12_I, 233)
+  RELOC_NUMBER (R_RISCV_PCREL_ICT_HI20, 234)
+  RELOC_NUMBER (R_RISCV_CALL_ICT, 235)
+  RELOC_NUMBER (R_RISCV_ICT_64, 236)
+  RELOC_NUMBER (R_RISCV_NO_RVC_REGION_BEGIN, 237)
+  RELOC_NUMBER (R_RISCV_NO_RVC_REGION_END, 238)
+  RELOC_NUMBER (R_RISCV_DELETE, 239)
+  RELOC_NUMBER (R_RISCV_ALIGN_BTB, 240)
+  RELOC_NUMBER (R_RISCV_10_PCREL, 241)
+  RELOC_NUMBER (R_RISCV_DATA, 242)
+  RELOC_NUMBER (R_RISCV_LALO_HI20, 243)
+  RELOC_NUMBER (R_RISCV_LALO_LO12_I, 244)
+  RELOC_NUMBER (R_RISCV_RELAX_ENTRY, 245)
+  RELOC_NUMBER (R_RISCV_LGP18S0, 246)
+  RELOC_NUMBER (R_RISCV_LGP17S1, 247)
+  RELOC_NUMBER (R_RISCV_LGP17S2, 248)
+  RELOC_NUMBER (R_RISCV_LGP17S3, 249)
+  RELOC_NUMBER (R_RISCV_SGP18S0, 250)
+  RELOC_NUMBER (R_RISCV_SGP17S1, 251)
+  RELOC_NUMBER (R_RISCV_SGP17S2, 252)
+  RELOC_NUMBER (R_RISCV_SGP17S3, 253)
+  RELOC_NUMBER (R_RISCV_RELAX_REGION_BEGIN, 254)
+  RELOC_NUMBER (R_RISCV_RELAX_REGION_END, 255)
 END_RELOC_NUMBERS (R_RISCV_max)
 
 /* Processor specific flags for the ELF header e_flags field.  */
@@ -121,6 +146,8 @@ END_RELOC_NUMBERS (R_RISCV_max)
 
 /* Object attributes.  */
 
+#define TAG_VALUE_BEGIN_V5     0x8000
+
 enum
 {
   /* 0-3 are generic.  */
@@ -129,7 +156,28 @@ enum
   Tag_RISCV_unaligned_access = 6,
   Tag_RISCV_priv_spec = 8,
   Tag_RISCV_priv_spec_minor = 10,
-  Tag_RISCV_priv_spec_revision = 12
+  Tag_RISCV_priv_spec_revision = 12,
+  Tag_RISCV_strict_align = Tag_RISCV_unaligned_access,
+  Tag_RISCV_ict_version = 0 + TAG_VALUE_BEGIN_V5,
+  Tag_RISCV_ict_model = 1 + TAG_VALUE_BEGIN_V5,
+};
+
+#define PT_RISCV_ATTRIBUTES 0x70000000
+
+#define SHT_RISCV_ATTRIBUTES   0x70000003
+
+#define NUM_KNOWN_OBJ_ATTRIBUTES_V5     0x2
+enum andes_old_attributes
+{
+  Tag_arch = 4,
+  Tag_priv_spec,
+  Tag_priv_spec_minor,
+  Tag_priv_spec_revision,
+  Tag_strict_align,
+  Tag_stack_align,
+  Tag_shfit = 0x100,
+  Tag_ict_version = TAG_VALUE_BEGIN_V5,
+  Tag_ict_model
 };
 
 #endif /* _ELF_RISCV_H */

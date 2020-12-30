@@ -86,3 +86,58 @@ riscv_release_subset_list (riscv_subset_list_t *);
 
 extern char *
 riscv_arch_str (unsigned, const riscv_subset_list_t *);
+
+struct riscv_elf_link_hash_table
+{
+  struct elf_link_hash_table elf;
+
+  asection *sdyntdata;
+
+  struct sym_cache sym_cache;
+
+  bfd_vma max_alignment;
+
+  FILE *sym_ld_script;
+  int gp_relative_insn;
+  int set_relax_align;
+  int target_aligned;
+  int avoid_btb_miss;
+  int set_relax_lui;
+  int set_relax_pc;
+  int set_relax_call;
+  int set_relax_tls_le;
+  int set_relax_cross_section_call;
+  int target_optimize;
+  int relax_status;
+  char *execit_export_file;
+  FILE *execit_import_file;
+  int keep_import_execit;
+  int update_execit_table;
+  int execit_limit;
+  int execit_loop_aware;
+  bfd_boolean execit_noji;
+  bfd_boolean execit_nols;
+};
+
+#define riscv_elf_hash_table(p) \
+  (elf_hash_table_id ((struct elf_link_hash_table *) ((p)->hash)) \
+  == RISCV_ELF_DATA ? ((struct riscv_elf_link_hash_table *) ((p)->hash)) : NULL)
+
+
+#define RISCV_RELAX_EXECIT_DONE	(1 << 1)
+
+#define RISCV_RELAX_EXECIT_ON	(1 << 1)
+
+
+#define R_RISCV_RELAX_ENTRY_DISABLE_RELAX_FLAG	(1 << 31)
+#define R_RISCV_RELAX_ENTRY_EXECIT_FLAG		(1 << 2)
+
+
+#define R_RISCV_RELAX_REGION_NO_EXECIT_FLAG	(1 << 2)
+#define R_RISCV_RELAX_REGION_LOOP_FLAG		(1 << 4)
+
+extern unsigned int number_of_howto_table;
+
+extern unsigned int ict_table_entries;
+extern unsigned int ict_model;
+extern bfd_boolean find_imported_ict_table;

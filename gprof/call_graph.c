@@ -31,6 +31,39 @@
 #include "sym_ids.h"
 
 void
+tl_cg_tally (bfd_vma from_pc,
+             bfd_vma self_pc,
+             unsigned int count, // 0 when return and 1 when call
+             unsigned int icnt,  // 0 when call
+             unsigned int ccnt)  // 0 when call
+{   Sym *parent;
+    Sym *child;
+
+    parent = sym_lookup (&symtab, from_pc);
+    child = sym_lookup (&symtab, self_pc);
+
+    if (child == NULL || parent == NULL)
+        return;
+
+    while (child >= symtab.base && ! child->is_func)
+        --child;
+
+    if (child < symtab.base)
+        return;
+
+    if (sym_id_arc_is_present (&syms[INCL_ARCS], parent, child)
+      ||(syms[INCL_ARCS].len == 0
+       &&!sym_id_arc_is_present (&syms[EXCL_ARCS], parent, child)))
+    {
+        child->ncalls+=count;
+        DBG (TALLYDEBUG,
+             printf (_("[tl_cg_tally] arc from %s to %s traversed instruction count=%u and cycle count=%u\n"),
+                     parent->name, child->name, icnt, ccnt));
+        tl_arc_add (parent, child, count, icnt, ccnt);
+    }
+}
+
+void
 cg_tally (bfd_vma from_pc, bfd_vma self_pc, unsigned long count)
 {
   Sym *parent;

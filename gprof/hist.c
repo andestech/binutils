@@ -55,6 +55,10 @@ static char hist_dimension_abbrev = 's';
 
 static double accum_time;	/* Accumulated time so far for print_line(). */
 static double total_time;	/* Total time for all routines.  */
+static unsigned long long accum_insn_cnt;
+static unsigned long long accum_cycle_cnt;
+static unsigned long long total_insn_cnt=0;
+static unsigned long long total_cycle_cnt=0;
 
 /* Table of SI prefixes for powers of 10 (used to automatically
    scale some of the values in the flat profile).  */
@@ -495,7 +499,23 @@ print_header (int prefix)
 	  _("time"), hist_dimension, hist_dimension, _("calls"), unit, unit,
 	  _("name"));
 }
+static void
+tl_print_header(int prefix ATTRIBUTE_UNUSED)
+{
+    if (total_insn_cnt == 0)
+    {
+        printf (_(" no time accumulated\n\n"));
 
+        total_insn_cnt = 1;
+    }
+
+    printf ("%11.11s %16.16s     %19.19s   %19.19s   %8.8s   %14.14s    %14.14s   %-8.8s\n",
+            "%     ", _("cumulative "), _("self   "), _("child  "), "", _("self  "), _("total "),
+            "");
+    printf ("%11.11s %16.16s     %19.19s   %19.19s   %9.9s   %14.14s    %14.14s   %-8.8s\n",
+            _("instr/cycle"), _("instr/cycle"), _("instr/cycle"), _("instr/cycle"),
+            _("calls"), _("i/c per call"), _("i/c per call"), _("name"));
+}
 
 static void
 print_line (Sym *sym, double scale)
@@ -530,6 +550,35 @@ print_line (Sym *sym, double scale)
 }
 
 
+
+static void
+tl_print_line (Sym *sym)
+{
+    if (ignore_zeros && sym->ncalls == 0 && sym->hist.total_insn_cnt == 0)
+        return;
+
+    accum_insn_cnt += sym->hist.total_insn_cnt;
+    accum_cycle_cnt += sym->hist.total_cycle_cnt;
+
+    printf ("%5.2f %5.2f %10llu %10llu %10llu %10llu %10llu %10llu",
+            total_insn_cnt > 0 ? 100 * (double)sym->hist.total_insn_cnt / (double)total_insn_cnt : 0.0,
+            total_cycle_cnt > 0 ? 100 * (double)sym->hist.total_cycle_cnt / (double)total_cycle_cnt : 0.0,
+            accum_insn_cnt, accum_cycle_cnt,
+            sym->hist.total_insn_cnt, sym->hist.total_cycle_cnt,
+            sym->cg.child_insn_cnt, sym->cg.child_cycle_cnt);
+
+    if (sym->ncalls != 0)
+        printf (" %8lu %8.2f %8.2f %8.2f %8.2f  ", (sym->ncalls + sym->cg.self_calls),
+                sym->hist.total_insn_cnt / (double)(sym->ncalls + sym->cg.self_calls),
+                sym->hist.total_cycle_cnt / (double)(sym->ncalls + sym->cg.self_calls),
+                (sym->hist.total_insn_cnt + sym->cg.child_insn_cnt) / (double)(sym->ncalls + sym->cg.self_calls),
+                (sym->hist.total_cycle_cnt + sym->cg.child_cycle_cnt) / (double)(sym->ncalls + sym->cg.self_calls));
+    else
+        printf (" %8.8s %8.8s %8.8s %8.8s %8.8s  ", "", "", "", "", "");
+
+    print_name_only (sym);
+    printf (" [%d]\n", sym->cg.index);
+}
 /* Compare LP and RP.  The primary comparison key is execution time,
    the secondary is number of invocation, and the tertiary is the
    lexicographic order of the function names.  */
@@ -559,6 +608,29 @@ cmp_time (const PTR lp, const PTR rp)
 }
 
 
+static int
+tl_cmp_time(const PTR lp,
+            const PTR rp)
+{   const Sym *left = *(const Sym **) lp;
+    const Sym *right = *(const Sym **) rp;
+    long long time_diff;
+
+    time_diff = right->hist.total_insn_cnt - left->hist.total_insn_cnt;
+
+    if (time_diff > 0)
+        return 1;
+
+    if (time_diff < 0)
+        return -1;
+
+    if (right->ncalls > left->ncalls)
+        return 1;
+
+    if (right->ncalls < left->ncalls)
+        return -1;
+
+    return strcmp (left->name, right->name);
+}
 /* Print the flat histogram profile.  */
 
 void
@@ -751,4 +823,88 @@ find_histogram_for_pc (bfd_vma pc)
 	return &histograms[i];
     }
   return 0;
+}
+
+void
+tl_hist_print(void)
+{   Sym **time_sorted_syms, *top_dog, *sym;
+    unsigned int index;
+    unsigned log_scale;
+    double top_time, time;
+    bfd_vma addr;
+
+    if (first_output)
+        first_output = FALSE;
+    else
+        printf ("\f\n");
+
+    accum_insn_cnt = 0;
+    accum_cycle_cnt = 0;
+
+    printf (_("Flat profile:\n"));
+
+    time_sorted_syms = (Sym **) xmalloc (symtab.len * sizeof (Sym *));
+
+    for (index = 0; index < symtab.len; ++index)
+        time_sorted_syms[index] = &symtab.base[index];
+
+    qsort (time_sorted_syms, symtab.len, sizeof (Sym *), tl_cmp_time);
+
+    log_scale = 0;
+    top_dog = 0;
+    top_time = 0.0;
+
+    for (index = 0; index < symtab.len; ++index)
+    {
+        sym = time_sorted_syms[index];
+
+        if (sym->ncalls != 0)
+        {
+            time = (sym->hist.total_insn_cnt + sym->cg.child_insn_cnt) / (double)sym->ncalls;
+
+            if (time > top_time)
+            {
+                top_dog = sym;
+                top_time = time;
+            }
+        }
+    }
+
+    tl_print_header (SItab[log_scale].prefix);
+
+    for (index = 0; index < symtab.len; ++index)
+    {
+        addr = time_sorted_syms[index]->addr;
+
+        if (sym_lookup (&syms[INCL_FLAT], addr)
+          ||(syms[INCL_FLAT].len == 0
+           &&!sym_lookup (&syms[EXCL_FLAT], addr)))
+            tl_print_line(time_sorted_syms[index]);
+    }
+
+    free (time_sorted_syms);
+
+    if (print_descriptions)
+        flat_blurb (stdout);
+}
+
+
+
+
+void
+tl_hist_assign_samples(void)
+{   unsigned int i;
+
+    for (i=0;i<symtab.len;i++)
+    {
+        if (!symtab.base[i].is_func)
+            continue;
+
+        total_insn_cnt += symtab.base[i].hist.total_insn_cnt;
+        total_cycle_cnt += symtab.base[i].hist.total_cycle_cnt;
+    }
+
+    DBG(SAMPLEDEBUG,
+        printf("[tl_hist_assign_samples] total instructions %llu cycles %llu\n",
+               total_insn_cnt, total_cycle_cnt));
 }

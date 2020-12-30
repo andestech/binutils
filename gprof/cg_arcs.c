@@ -51,6 +51,217 @@ unsigned int num_cycles;
 Arc **arcs;
 unsigned int numarcs;
 
+static void
+tl_propagate_time (Sym *parent)
+{   Arc *arc;
+    Sym *child;
+    long long share_insn, prop_share_insn;
+    long long share_cycle, prop_share_cycle;
+
+    if (parent->cg.prop.fract == 0.0)
+        return;
+
+    for (arc = parent->cg.children; arc; arc = arc->next_child)
+    {   child = arc->child;
+        if (arc->count == 0 || child == parent || child->cg.prop.fract == 0)
+            continue;
+
+        if (child->cg.cyc.head != child)
+        {   if (parent->cg.cyc.num == child->cg.cyc.num)
+                continue;
+
+            if (parent->cg.top_order <= child->cg.top_order)
+                fprintf (stderr, "[tl_propagate_time] toporder botches\n");
+            child = child->cg.cyc.head;
+        } else
+        {   if (parent->cg.top_order <= child->cg.top_order)
+            {   fprintf (stderr, "[tl_propagate_time] toporder botches\n");
+                continue;
+	    }
+	}
+
+        if (child->ncalls == 0)
+            continue;
+
+        arc->total_insn_cnt = child->hist.total_insn_cnt * (((double) arc->count)
+                                     / ((double) child->ncalls));
+        arc->total_cycle_cnt = child->hist.total_cycle_cnt * (((double) arc->count)
+                                     / ((double) child->ncalls));
+        arc->child_insn_cnt = child->cg.child_insn_cnt
+                        * (((double) arc->count) / ((double) child->ncalls));
+        arc->child_cycle_cnt = child->cg.child_cycle_cnt
+                        * (((double) arc->count) / ((double) child->ncalls));
+        share_insn = arc->total_insn_cnt + arc->child_insn_cnt;
+        share_cycle = arc->total_cycle_cnt + arc->child_cycle_cnt;
+        parent->cg.child_insn_cnt += share_insn;
+        parent->cg.child_cycle_cnt += share_cycle;
+
+        prop_share_insn = parent->cg.prop.fract * share_insn;
+        prop_share_cycle = parent->cg.prop.fract * share_cycle;
+
+        parent->cg.prop.child_insn_cnt += prop_share_insn;
+        parent->cg.prop.child_cycle_cnt += prop_share_cycle;
+        arc->total_insn_cnt *= parent->cg.prop.fract;
+        arc->total_cycle_cnt *= parent->cg.prop.fract;
+        arc->child_insn_cnt *= parent->cg.prop.fract;
+        arc->child_cycle_cnt *= parent->cg.prop.fract;
+
+        if (parent->cg.cyc.head != parent)
+        {   parent->cg.cyc.head->cg.child_insn_cnt += share_insn;
+            parent->cg.cyc.head->cg.child_cycle_cnt += share_cycle;
+            parent->cg.cyc.head->cg.prop.child_insn_cnt += prop_share_insn;
+            parent->cg.cyc.head->cg.prop.child_cycle_cnt += prop_share_cycle;
+        }
+        DBG (PROPDEBUG,
+             printf ("[tl_propagate_time] child \t");
+             print_name (child);
+             printf (" with %llu/%llu/%llu %llu %lu/%lu\n",
+                     child->hist.total_insn_cnt, child->hist.total_cycle_cnt,
+                     child->cg.child_insn_cnt, child->cg.child_cycle_cnt,
+                     arc->count, child->ncalls);
+             printf ("[tl_propagate_time] parent\t");
+             print_name (parent);
+             printf ("\n[tl_propagate_time] share %llu/%llu\n",
+                     share_insn, share_cycle));
+    }
+}
+
+static void
+tl_cycle_time (void)
+{   Sym *member, *cyc;
+
+    for (cyc = &cycle_header[1]; cyc <= &cycle_header[num_cycles]; ++cyc)
+    {   for (member = cyc->cg.cyc.next; member; member = member->cg.cyc.next)
+        {   if (member->cg.prop.fract == 0.0)
+            {
+                continue;
+            }
+            cyc->hist.total_insn_cnt += member->hist.total_insn_cnt;
+            cyc->hist.total_cycle_cnt += member->hist.total_cycle_cnt;
+        }
+        cyc->cg.prop.self_insn_cnt = cyc->cg.prop.fract * cyc->hist.total_insn_cnt;
+        cyc->cg.prop.self_cycle_cnt = cyc->cg.prop.fract * cyc->hist.total_cycle_cnt;
+    }
+}
+static void
+tl_propagate_flags (Sym **symbols)
+{   int index;
+    Sym *old_head, *child;
+
+    old_head = 0;
+    for (index = symtab.len - 1; index >= 0; --index)
+    {
+        child = symbols[index];
+        if (child->cg.cyc.head != old_head)
+        {
+            old_head = child->cg.cyc.head;
+            inherit_flags (child);
+        }
+        DBG (PROPDEBUG,
+             printf ("[tl_prop_flags] ");
+             print_name (child);
+             printf ("inherits print-flag %d and prop-fract %f\n",
+                     child->cg.print_flag, child->cg.prop.fract));
+        if (!child->cg.print_flag)
+        {
+             if (sym_lookup (&syms[INCL_GRAPH], child->addr)
+              ||(syms[INCL_GRAPH].len == 0
+               &&!sym_lookup (&syms[EXCL_GRAPH], child->addr)))
+             {
+                 child->cg.print_flag = TRUE;
+             }
+        } else
+        {
+           if (!sym_lookup (&syms[INCL_GRAPH], child->addr)
+             &&sym_lookup (&syms[EXCL_GRAPH], child->addr))
+           {
+               child->cg.print_flag = FALSE;
+           }
+        }
+        if (child->cg.prop.fract == 0.0)
+        {
+            if (sym_lookup (&syms[INCL_TIME], child->addr)
+             ||(syms[INCL_TIME].len == 0
+              &&!sym_lookup (&syms[EXCL_TIME], child->addr)))
+            {
+                child->cg.prop.fract = 1.0;
+            }
+        } else
+        {
+            if (!sym_lookup (&syms[INCL_TIME], child->addr)
+              &&sym_lookup (&syms[EXCL_TIME], child->addr))
+            {
+                child->cg.prop.fract = 0.0;
+            }
+        }
+        child->cg.prop.self_insn_cnt = child->hist.total_insn_cnt * child->cg.prop.fract;
+        child->cg.prop.self_cycle_cnt = child->hist.total_cycle_cnt * child->cg.prop.fract;
+        print_insn_cnt += child->cg.prop.self_insn_cnt;
+        print_cycle_cnt += child->cg.prop.self_cycle_cnt;
+        DBG (PROPDEBUG,
+             printf ("[tl_prop_flags] ");
+             print_name (child);
+             printf (" ends up with printflag %d and prop-fract %f\n",
+                     child->cg.print_flag, child->cg.prop.fract);
+             printf ("[tl_prop_flags] instruction count %llu propself %llu print %llu\n",
+                     child->hist.total_insn_cnt, child->cg.prop.self_insn_cnt, print_insn_cnt);
+             printf ("[tl_prop_flags] cycle count %llu propself %llu print %llu\n",
+                     child->hist.total_cycle_cnt, child->cg.prop.self_cycle_cnt, print_cycle_cnt));
+    }
+}
+
+static int
+tl_cmp_total (const PTR lp, const PTR rp)
+{   const Sym *left = *(const Sym **) lp;
+    const Sym *right = *(const Sym **) rp;
+    long long diff;
+
+    diff = (left->cg.prop.self_insn_cnt + left->cg.prop.child_insn_cnt)
+         - (right->cg.prop.self_insn_cnt + right->cg.prop.child_insn_cnt);
+    if (diff < 0)
+    {
+        return 1;
+    }
+    if (diff > 0)
+    {
+        return -1;
+    }
+    if (!left->name && left->cg.cyc.num != 0)
+    {
+        return -1;
+    }
+    if (!right->name && right->cg.cyc.num != 0)
+    {
+        return 1;
+    }
+    if (!left->name)
+    {
+        return -1;
+    }
+    if (!right->name)
+    {
+        return 1;
+    }
+    if (left->name[0] != '_' && right->name[0] == '_')
+    {
+        return -1;
+    }
+    if (left->name[0] == '_' && right->name[0] != '_')
+    {
+        return 1;
+    }
+    if (left->ncalls > right->ncalls)
+    {
+        return -1;
+    }
+    if (left->ncalls < right->ncalls)
+    {
+        return 1;
+    }
+
+    return strcmp (left->name, right->name);
+}
+
 /*
  * Return TRUE iff PARENT has an arc to covers the address
  * range covered by CHILD.
@@ -80,7 +291,37 @@ arc_lookup (Sym *parent, Sym *child)
   return 0;
 }
 
+static void
+arc_add_shared (Arc *arc)
+{   static unsigned int maxarcs = 0;
+    Arc **newarcs;
 
+    if (arc->parent != arc->child)
+    {
+        if (numarcs == maxarcs)
+        {
+            if (maxarcs == 0)
+                maxarcs = 1;
+            maxarcs *= 2;
+
+            newarcs = (Arc **)xmalloc(sizeof (Arc *) * maxarcs);
+
+            memcpy (newarcs, arcs, numarcs * sizeof (Arc *));
+
+            free (arcs);
+
+            arcs = newarcs;
+        }
+
+        arcs[numarcs++] = arc;
+    }
+
+    arc->next_child = arc->parent->cg.children;
+    arc->parent->cg.children = arc;
+
+    arc->next_parent = arc->child->cg.parents;
+    arc->child->cg.parents = arc;
+}
 /*
  * Add (or just increment) an arc:
  */
@@ -147,6 +388,42 @@ arc_add (Sym *parent, Sym *child, unsigned long count)
   /* prepend this parent to the parents of this child: */
   arc->next_parent = child->cg.parents;
   child->cg.parents = arc;
+}
+
+void
+tl_arc_add (Sym *parent,
+            Sym *child,
+            unsigned int count,
+            unsigned int icnt,
+            unsigned int ccnt)
+{   Arc *arc;
+
+    DBG (TALLYDEBUG, printf ("[tl_arc_add] arc from %s to %s\n",
+                             parent->name, child->name));
+    arc = arc_lookup (parent, child);
+    if (arc)
+    {
+        DBG (TALLYDEBUG, printf ("[tally] hit %lu ++\n",
+                                 arc->count));
+        if (count==0)
+        {
+            arc->total_insn_cnt += icnt;
+            arc->total_cycle_cnt += ccnt;
+        } else
+            arc->count ++;
+
+    } else
+    {
+        arc = (Arc *) xmalloc (sizeof (*arc));
+        memset (arc, 0, sizeof (*arc));
+        arc->parent = parent;
+        arc->child = child;
+        arc->count = 1;
+        arc->total_insn_cnt = 0;
+        arc->total_cycle_cnt = 0;
+
+        arc_add_shared(arc);
+    }
 }
 
 
@@ -684,4 +961,94 @@ cg_assemble (void)
     time_sorted_syms[sym_index]->cg.index = sym_index + 1;
 
   return time_sorted_syms;
+}
+
+Sym **
+tl_cg_assemble (void)
+{   Sym *parent, **time_sorted_syms, **top_sorted_syms;
+    unsigned int index;
+    Arc *arc;
+
+#ifdef TRACE_ARCS
+    trace_arcs();
+#endif
+#ifdef TRACE_SYMS
+    trace_syms();
+#endif
+
+    for (parent = symtab.base; parent < symtab.limit; parent++)
+    {   parent->cg.child_insn_cnt = 0;
+        parent->cg.child_cycle_cnt = 0;
+        arc = arc_lookup (parent, parent);
+        if (arc && parent == arc->child)
+        {   parent->ncalls -= arc->count;
+            parent->cg.self_calls = arc->count;
+        } else
+        {   parent->cg.self_calls = 0;
+        }
+        parent->cg.prop.fract = 0.0;
+        parent->cg.prop.self_insn_cnt = 0;
+        parent->cg.prop.self_cycle_cnt = 0;
+        parent->cg.prop.child_insn_cnt = 0;
+        parent->cg.prop.child_cycle_cnt = 0;
+        parent->cg.print_flag = FALSE;
+        parent->cg.top_order = DFN_NAN;
+        parent->cg.cyc.num = 0;
+        parent->cg.cyc.head = parent;
+        parent->cg.cyc.next = 0;
+        if (ignore_direct_calls)
+            find_call (parent, parent->addr, (parent + 1)->addr);
+    }
+
+    for (parent = symtab.base; parent < symtab.limit; parent++)
+    {   if (parent->cg.top_order == DFN_NAN)
+            cg_dfn (parent);
+    }
+
+    cycle_link ();
+
+    top_sorted_syms = (Sym **) xmalloc (symtab.len * sizeof (Sym *));
+    for (index = 0; index < symtab.len; ++index)
+    {   top_sorted_syms[index] = &symtab.base[index];
+    }
+    qsort (top_sorted_syms, symtab.len, sizeof (Sym *), cmp_topo);
+    DBG (DFNDEBUG,
+         printf ("[tl_cg_assemble] topological sort listing\n");
+         for (index = 0; index < symtab.len; ++index)
+         {   printf ("[tl_cg_assemble] ");
+             printf ("%d:", top_sorted_syms[index]->cg.top_order);
+             print_name (top_sorted_syms[index]);
+             printf ("\n");
+         }
+        );
+
+    tl_propagate_flags (top_sorted_syms);
+
+    tl_cycle_time ();
+    for (index = 0; index < symtab.len; ++index)
+    {   tl_propagate_time (top_sorted_syms[index]);
+    }
+    free (top_sorted_syms);
+
+    time_sorted_syms = (Sym **) xmalloc ((symtab.len + num_cycles) * sizeof (Sym *));
+    for (index = 0; index < symtab.len; index++)
+    {   time_sorted_syms[index] = &symtab.base[index];
+    }
+    for (index = 1; index <= num_cycles; index++)
+    {   time_sorted_syms[symtab.len + index - 1] = &cycle_header[index];
+    }
+    qsort (time_sorted_syms, symtab.len + num_cycles, sizeof (Sym *),
+           tl_cmp_total);
+    for (index = 0; index < symtab.len + num_cycles; index++)
+    {   time_sorted_syms[index]->cg.index = index + 1;
+    }
+
+#ifdef TRACE_ARCS
+    trace_arcs();
+#endif
+#ifdef TRACE_SYMS
+    trace_syms();
+#endif
+
+    return time_sorted_syms;
 }

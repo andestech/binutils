@@ -37,6 +37,11 @@ typedef struct arc
     struct arc *next_parent;	/* next parent of CHILD */
     struct arc *next_child;	/* next child of PARENT */
     int has_been_placed;	/* have this arc's functions been placed? */
+
+    unsigned long long total_insn_cnt;
+    unsigned long long total_cycle_cnt;
+    unsigned long long child_insn_cnt;
+    unsigned long long child_cycle_cnt;
   }
 Arc;
 
@@ -44,8 +49,14 @@ extern unsigned int num_cycles;	/* number of cycles discovered */
 extern Sym *cycle_header;	/* cycle headers */
 
 extern void arc_add (Sym * parent, Sym * child, unsigned long count);
+extern void tl_arc_add (Sym *parent,
+                        Sym *child,
+                        unsigned int count,
+                        unsigned int icnt,
+                        unsigned int ccnt);
 extern Arc *arc_lookup (Sym * parent, Sym * child);
 extern Sym **cg_assemble (void);
+extern Sym **tl_cg_assemble (void);
 extern Arc **arcs;
 extern unsigned int numarcs;
 
