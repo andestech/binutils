@@ -158,6 +158,15 @@
    */
 #undef LT_OBJDIR
 
+/* Define if ex9-ext of nds32 target is supported. */
+#undef NDS32_EX9_EXT
+
+/* Define if ifc-ext of nds32 target is supported. */
+#undef NDS32_IFC_EXT
+
+/* Define if linux toolchain is to be built. */
+#undef NDS32_LINUX_TOOLCHAIN
+
 /* Name of package */
 #undef PACKAGE
 

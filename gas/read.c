@@ -1703,7 +1703,7 @@ s_comm_internal (int param,
 
   temp = get_absolute_expr (&exp);
   size = temp;
-  size &= ((offsetT) 2 << (stdoutput->arch_info->bits_per_address - 1)) - 1;
+  size &= ((addressT) 2 << (stdoutput->arch_info->bits_per_address - 1)) - 1;
   if (exp.X_op == O_absent)
     {
       as_bad (_("missing size expression"));
@@ -5019,7 +5019,7 @@ output_big_sleb128 (char *p, LITTLENUM_TYPE *bignum, int size)
     {
       /* Sign-extend VAL.  */
       if (val & (1 << (loaded - 1)))
-	val |= ~0 << loaded;
+	val |= ~0U << loaded;
       if (orig)
 	*p = val & 0x7f;
       p++;
