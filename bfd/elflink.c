@@ -125,7 +125,10 @@ _bfd_elf_define_linkage_sym (bfd *abfd,
   h->def_regular = 1;
   h->non_elf = 0;
   h->root.linker_def = 1;
-  h->type = STT_OBJECT;
+  if (0 == strcmp (name, "_PROCEDURE_LINKAGE_TABLE_"))
+    h->type = STT_FUNC;
+  else
+    h->type = STT_OBJECT;
   if (ELF_ST_VISIBILITY (h->other) != STV_INTERNAL)
     h->other = (h->other & ~ELF_ST_VISIBILITY (-1)) | STV_HIDDEN;
 

@@ -1,5 +1,5 @@
-#as:
-#objdump: -dr
+#as: -march=rv32i
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 

@@ -1,6 +1,6 @@
 #as: -march=rv32i_zawrs
 #source: zawrs.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

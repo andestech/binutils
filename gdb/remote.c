@@ -4005,6 +4005,12 @@ remote_target::remote_current_thread (ptid_t oldpid)
 int
 remote_target::remote_get_threads_with_ql (threads_listing_context *context)
 {
+	struct remote_state *rs = get_remote_state ();
+	if (rs->last_sent_step) {
+		/* skip Sending packet: $qL12, if single-step */
+		return 0;
+	}
+
   if (remote_threadlist_iterator (remote_newthread_step, context,
 				  CRAZY_MAX_THREADS) >= 0)
     return 1;
@@ -6044,6 +6050,16 @@ remote_unpush_and_throw (remote_target *target)
   remote_unpush_target (target);
   throw_error (TARGET_CLOSE_ERROR, _("Disconnected from target."));
 }
+
+#if defined(_WIN32)
+void nds_remote_unpush_target (void)
+{
+  remote_target *curr_remote = get_current_remote_target ();
+  remote_unpush_target (curr_remote);
+  throw_error (TARGET_CLOSE_ERROR, _("Remote connection closed"));
+}
+
+#endif
 
 void
 remote_target::open_1 (const char *name, int from_tty, int extended_p)
@@ -11191,7 +11207,9 @@ remote_target::stopped_data_address (CORE_ADDR *addr_p)
 	  == TARGET_STOPPED_BY_WATCHPOINT))
     {
       *addr_p = get_remote_thread_info (thread)->watch_data_address;
-      return true;
+      /* If the addr is 0x0, we assume multiple hits.
+	 Pretend data_address is unknown and let GDB figure it out.  */
+      return (*addr_p) != 0x0;
     }
 
   return false;

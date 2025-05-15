@@ -23,3 +23,4 @@ target:
 	c.not x15
 	mul x8,x8,x15
 	c.mul x9,x12
+	c.lbu x9,(x8) # conflict with exec.it

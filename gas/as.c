@@ -1467,6 +1467,10 @@ main (int argc, char ** argv)
      directives from the user or by the backend, emit it now.  */
   cfi_finish ();
 
+#ifdef md_insert_uleb128_fixes
+  md_insert_uleb128_fixes ();
+#endif
+
   keep_it = 0;
   if (seen_at_least_1_file ())
     {

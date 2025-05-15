@@ -161,7 +161,7 @@ proc test_with_program {} {
 
     # Test $_thread/$_inferior convenience variables in various commands.
     gdb_test "info threads \$_thread" "\\* 1 .* main.*"
-    gdb_test "info inferiors \$_inferior" "\\* 1 .* process.*"
+    gdb_test "info inferiors \$_inferior" "\\* 1 .* Remote target.*"
     gdb_test "break foo_int thread \$_thread" "Breakpoint \[0-9\]*.*"
 }
 

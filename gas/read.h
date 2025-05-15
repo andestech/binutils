@@ -138,7 +138,7 @@ extern void equals (char *, int);
 extern void float_cons (int);
 extern void ignore_rest_of_line (void);
 #define discard_rest_of_line ignore_rest_of_line
-extern unsigned output_leb128 (char *, valueT, int);
+extern unsigned output_leb128 (char *, valueT, int, bool);
 extern void pseudo_set (symbolS * symbolP);
 extern void read_a_source_file (const char *name);
 extern void read_begin (void);

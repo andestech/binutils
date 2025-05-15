@@ -1,7 +1,7 @@
 #as: -march=rv64i_zicsr -mcsr-check -mpriv-spec=1.9.1
 #source: csr.s
 #warning_output: csr-version-1p9p1.l
-#objdump: -dr -Mpriv-spec=1.9.1
+#objdump: -d -Mpriv-spec=1.9.1
 
 .*:[ 	]+file format .*
 
@@ -631,6 +631,16 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+72159073[ 	]+csrw[ 	]+0x721,a1
 [ 	]+[0-9a-f]+:[ 	]+72202573[ 	]+csrr[ 	]+a0,0x722
 [ 	]+[0-9a-f]+:[ 	]+72259073[ 	]+csrw[ 	]+0x722,a1
+[ 	]+[0-9a-f]+:[ 	]+35202573[ 	]+csrr[ 	]+a0,mireg2
+[ 	]+[0-9a-f]+:[ 	]+35259073[ 	]+csrw[ 	]+mireg2,a1
+[ 	]+[0-9a-f]+:[ 	]+35302573[ 	]+csrr[ 	]+a0,mireg3
+[ 	]+[0-9a-f]+:[ 	]+35359073[ 	]+csrw[ 	]+mireg3,a1
+[ 	]+[0-9a-f]+:[ 	]+35502573[ 	]+csrr[ 	]+a0,mireg4
+[ 	]+[0-9a-f]+:[ 	]+35559073[ 	]+csrw[ 	]+mireg4,a1
+[ 	]+[0-9a-f]+:[ 	]+35602573[ 	]+csrr[ 	]+a0,mireg5
+[ 	]+[0-9a-f]+:[ 	]+35659073[ 	]+csrw[ 	]+mireg5,a1
+[ 	]+[0-9a-f]+:[ 	]+35702573[ 	]+csrr[ 	]+a0,mireg6
+[ 	]+[0-9a-f]+:[ 	]+35759073[ 	]+csrw[ 	]+mireg6,a1
 [ 	]+[0-9a-f]+:[ 	]+30c02573[ 	]+csrr[ 	]+a0,mstateen0
 [ 	]+[0-9a-f]+:[ 	]+30c59073[ 	]+csrw[ 	]+mstateen0,a1
 [ 	]+[0-9a-f]+:[ 	]+30d02573[ 	]+csrr[ 	]+a0,mstateen1
@@ -773,6 +783,26 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+73e59073[ 	]+csrw[ 	]+mhpmevent30h,a1
 [ 	]+[0-9a-f]+:[ 	]+73f02573[ 	]+csrr[ 	]+a0,mhpmevent31h
 [ 	]+[0-9a-f]+:[ 	]+73f59073[ 	]+csrw[ 	]+mhpmevent31h,a1
+[ 	]+[0-9a-f]+:[ 	]+15202573[ 	]+csrr[ 	]+a0,sireg2
+[ 	]+[0-9a-f]+:[ 	]+15259073[ 	]+csrw[ 	]+sireg2,a1
+[ 	]+[0-9a-f]+:[ 	]+15302573[ 	]+csrr[ 	]+a0,sireg3
+[ 	]+[0-9a-f]+:[ 	]+15359073[ 	]+csrw[ 	]+sireg3,a1
+[ 	]+[0-9a-f]+:[ 	]+15502573[ 	]+csrr[ 	]+a0,sireg4
+[ 	]+[0-9a-f]+:[ 	]+15559073[ 	]+csrw[ 	]+sireg4,a1
+[ 	]+[0-9a-f]+:[ 	]+15602573[ 	]+csrr[ 	]+a0,sireg5
+[ 	]+[0-9a-f]+:[ 	]+15659073[ 	]+csrw[ 	]+sireg5,a1
+[ 	]+[0-9a-f]+:[ 	]+15702573[ 	]+csrr[ 	]+a0,sireg6
+[ 	]+[0-9a-f]+:[ 	]+15759073[ 	]+csrw[ 	]+sireg6,a1
+[ 	]+[0-9a-f]+:[ 	]+25202573[ 	]+csrr[ 	]+a0,vsireg2
+[ 	]+[0-9a-f]+:[ 	]+25259073[ 	]+csrw[ 	]+vsireg2,a1
+[ 	]+[0-9a-f]+:[ 	]+25302573[ 	]+csrr[ 	]+a0,vsireg3
+[ 	]+[0-9a-f]+:[ 	]+25359073[ 	]+csrw[ 	]+vsireg3,a1
+[ 	]+[0-9a-f]+:[ 	]+25502573[ 	]+csrr[ 	]+a0,vsireg4
+[ 	]+[0-9a-f]+:[ 	]+25559073[ 	]+csrw[ 	]+vsireg4,a1
+[ 	]+[0-9a-f]+:[ 	]+25602573[ 	]+csrr[ 	]+a0,vsireg5
+[ 	]+[0-9a-f]+:[ 	]+25659073[ 	]+csrw[ 	]+vsireg5,a1
+[ 	]+[0-9a-f]+:[ 	]+25702573[ 	]+csrr[ 	]+a0,vsireg6
+[ 	]+[0-9a-f]+:[ 	]+25759073[ 	]+csrw[ 	]+vsireg6,a1
 [ 	]+[0-9a-f]+:[ 	]+14d02573[ 	]+csrr[ 	]+a0,stimecmp
 [ 	]+[0-9a-f]+:[ 	]+14d59073[ 	]+csrw[ 	]+stimecmp,a1
 [ 	]+[0-9a-f]+:[ 	]+15d02573[ 	]+csrr[ 	]+a0,stimecmph
@@ -881,6 +911,8 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+7a359073[ 	]+csrw[ 	]+tdata3,a1
 [ 	]+[0-9a-f]+:[ 	]+01502573[ 	]+csrr[ 	]+a0,seed
 [ 	]+[0-9a-f]+:[ 	]+01559073[ 	]+csrw[ 	]+seed,a1
+[ 	]+[0-9a-f]+:[ 	]+01702573[ 	]+csrr[ 	]+a0,jvt
+[ 	]+[0-9a-f]+:[ 	]+01759073[ 	]+csrw[ 	]+jvt,a1
 [ 	]+[0-9a-f]+:[ 	]+00802573[ 	]+csrr[ 	]+a0,vstart
 [ 	]+[0-9a-f]+:[ 	]+00859073[ 	]+csrw[ 	]+vstart,a1
 [ 	]+[0-9a-f]+:[ 	]+00902573[ 	]+csrr[ 	]+a0,vxsat
@@ -895,3 +927,5 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+c2159073[ 	]+csrw[ 	]+vtype,a1
 [ 	]+[0-9a-f]+:[ 	]+c2202573[ 	]+csrr[ 	]+a0,vlenb
 [ 	]+[0-9a-f]+:[ 	]+c2259073[ 	]+csrw[ 	]+vlenb,a1
+[ 	]+[0-9a-f]+:[ 	]+01102573[ 	]+csrr[ 	]+a0,ssp
+[ 	]+[0-9a-f]+:[ 	]+01159073[ 	]+csrw[ 	]+ssp,a1

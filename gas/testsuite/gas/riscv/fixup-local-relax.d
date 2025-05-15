@@ -9,9 +9,10 @@ Disassembly of section .text:
 
 0+0000 <foo>:
 [ 	]+0:[ 	]+00000517[ 	]+auipc[ 	]+a0,0x0
+[ 	]+0:[ 	]+R_RISCV_RELAX_ENTRY[ 	]+\*ABS\*
 [ 	]+0:[ 	]+R_RISCV_PCREL_HI20[ 	]+.LL0.*
 [ 	]+0:[ 	]+R_RISCV_RELAX.*
-[ 	]+4:[ 	]+00850513[ 	]+addi[ 	]+a0,a0,8 # 8 <.LL0>
+[ 	]+4:[ 	]+00850513[ 	]+addi[ 	]+a0,a0,8 # 0x8 <.LL0>
 [ 	]+4:[ 	]+R_RISCV_PCREL_LO12_I[ 	]+.L0.*
 [ 	]+4:[ 	]+R_RISCV_RELAX.*
 
@@ -33,7 +34,7 @@ Disassembly of section .text:
 [ 	]+18:[ 	]+00000517[ 	]+auipc[ 	]a0,0x0
 [ 	]+18:[ 	]+R_RISCV_PCREL_HI20[ 	]+.LL2.*
 [ 	]+18:[ 	]R_RISCV_RELAX.*
-[ 	]+1c:[ 	]+00852503[ 	]+lw[ 	]+a0,8\(a0\) # 20 <.LL2>
+[ 	]+1c:[ 	]+00852503[ 	]+lw[ 	]+a0,8\(a0\) # 0x20 <.LL2>
 [ 	]+1c:[ 	]+R_RISCV_PCREL_LO12_I[ 	]+.LL1.*
 [ 	]+1c:[ 	]+R_RISCV_RELAX.*
 

@@ -1,6 +1,6 @@
 #as: -march=rv64g_zicbom
 #source: zicbom.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

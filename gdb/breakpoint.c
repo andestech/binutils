@@ -129,7 +129,7 @@ static bool watchpoint_locations_match (const struct bp_location *loc1,
 
 static bool breakpoint_locations_match (const struct bp_location *loc1,
 					const struct bp_location *loc2,
-					bool sw_hw_bps_match = false);
+					bool sw_hw_bps_match = true);
 
 static bool breakpoint_location_address_match (struct bp_location *bl,
 					       const struct address_space *aspace,
@@ -8605,6 +8605,20 @@ update_dprintf_commands (const char *args, int from_tty,
 	update_dprintf_command_list (&b);
 }
 
+struct inferior *nds_find_inferior_by_thread (int thread_id);
+struct inferior *nds_find_inferior_by_thread (int thread_id)
+{
+	for (inferior *inf : all_inferiors ()) {
+		for (thread_info *thread : inf->threads ())
+		{
+			/*gdb_printf ("thread->global_num: 0x%x\n", thread->global_num);*/
+			if (thread->global_num == thread_id)
+				 return inf;
+		}
+	}
+	return NULL;
+}
+
 code_breakpoint::code_breakpoint (struct gdbarch *gdbarch_,
 				  enum bptype type_,
 				  gdb::array_view<const symtab_and_line> sals,
@@ -8688,6 +8702,12 @@ code_breakpoint::code_breakpoint (struct gdbarch *gdbarch_,
 
   for (const auto &sal : sals)
     {
+      if (thread != -1) {
+        struct inferior *inf = nds_find_inferior_by_thread (thread);
+        /* gdb_printf ("inf->pspace: 0x%x, sal.pspace: 0x%x\n", inf->pspace, sal.pspace); */
+        if ((inf) && (sal.pspace != inf->pspace))
+          continue;
+      }
       if (from_tty)
 	{
 	  struct gdbarch *loc_gdbarch = get_sal_arch (sal);

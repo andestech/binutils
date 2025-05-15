@@ -26,6 +26,10 @@ require !use_gdb_stub
 # enabled as it will be redirected to the log.
 require !gdb_debug_enabled
 
+if { ![istarget "*-*-linux*"] } then {
+    continue
+}
+
 standard_testfile
 
 if { [build_executable "failed to prepare" $testfile $srcfile debug] } {

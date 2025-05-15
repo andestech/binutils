@@ -85,6 +85,12 @@ foreach test_data {{SEGV "Segmentation fault"} \
 	gdb_test "cd [file dirname $binfile]" "Working directory .*" \
 	    "cd to test directory"
 
+  if [ishost *-*-cygwin*] {
+    set exp_saw_fatal_msg "^Fatal signal: \r\n"
+  } else {
+    set exp_saw_fatal_msg "^Fatal signal: ${msg}\r\n"
+  }
+
 	# Send the fatal signal to GDB.
 	remote_exec host "kill -${sig} ${testpid}"
 
@@ -98,7 +104,7 @@ foreach test_data {{SEGV "Segmentation fault"} \
 	    -early -re "^\r\n" {
 		exp_continue
 	    }
-	    -early -re "^Fatal signal: ${msg}\r\n" {
+	    -early -re "${exp_saw_fatal_msg}" {
 		set saw_fatal_msg true
 		exp_continue
 	    }
@@ -106,7 +112,7 @@ foreach test_data {{SEGV "Segmentation fault"} \
 		set saw_bt_start true
 		exp_continue
 	    }
-	    -early -re ".+\r\n---------------------\r\n" {
+	    -early -re "---------------------\r\n" {
 		set saw_bt_end true
 		exp_continue
 	    }

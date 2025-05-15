@@ -1,4 +1,4 @@
-#as:
+#as: -march=rv32i
 #objdump: -dr
 
 .*:[ 	]+file format .*
@@ -8,6 +8,7 @@ Disassembly of section .text:
 
 0+000 <.text>:
 [ 	]+[0-9a-f]+:[ 	]+00000517[ 	]+auipc[ 	]+a0,0x0
+[ 	]+[0-9a-f]+:[ 	]+R_RISCV_RELAX_ENTRY[ 	]+\*ABS\*
 [ 	]+[0-9a-f]+:[ 	]+R_RISCV_PCREL_HI20[ 	]+a
 [ 	]+[0-9a-f]+:[ 	]+R_RISCV_RELAX[ 	]+\*ABS\*
 [ 	]+[0-9a-f]+:[ 	]+00050513[ 	]+mv[ 	]+a0,a0

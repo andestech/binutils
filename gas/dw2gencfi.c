@@ -141,7 +141,7 @@ out_four (int data)
 static void
 out_uleb128 (addressT value)
 {
-  output_leb128 (frag_more (sizeof_leb128 (value, 0)), value, 0);
+  output_leb128 (frag_more (sizeof_leb128 (value, 0)), value, 0, false);
 }
 
 /* Emit an unsigned "little-endian base 128" number.  */
@@ -149,7 +149,7 @@ out_uleb128 (addressT value)
 static void
 out_sleb128 (offsetT value)
 {
-  output_leb128 (frag_more (sizeof_leb128 (value, 1)), value, 1);
+  output_leb128 (frag_more (sizeof_leb128 (value, 1)), value, 1, false);
 }
 
 static unsigned int

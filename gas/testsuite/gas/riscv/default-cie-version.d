@@ -1,5 +1,5 @@
 #objdump: --dwarf=frames
-#as:
+#as: -march=rv32i
 #...
 .*:     file format elf.*-.*riscv
 

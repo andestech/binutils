@@ -356,6 +356,13 @@
 	csr mcyclecfgh
 	csr minstretcfgh
 
+	# Smcsrind extension (except miselect/mireg in Smaia)
+	csr mireg2
+	csr mireg3
+	csr mireg4
+	csr mireg5
+	csr mireg6
+
 	# Smstateen/Ssstateen extensions
 	csr mstateen0
 	csr mstateen1
@@ -433,6 +440,18 @@
 	csr mhpmevent30h
 	csr mhpmevent31h
 
+	# Sscsrind extension (except {v,}si{select,reg} in Ssaia)
+	csr sireg2
+	csr sireg3
+	csr sireg4
+	csr sireg5
+	csr sireg6
+	csr vsireg2
+	csr vsireg3
+	csr vsireg4
+	csr vsireg5
+	csr vsireg6
+
 	# Sstc extension
 	csr stimecmp
 	csr stimecmph
@@ -502,6 +521,9 @@
 	# Scalar crypto
 	csr seed		# 0x015, Entropy Source
 
+	# Table Jump
+	csr jvt
+
 	# Vector
 	csr vstart
 	csr vxsat
@@ -510,3 +532,6 @@
 	csr vl
 	csr vtype
 	csr vlenb
+
+	# Control flow integrity (the Zicfiss extension)
+	csr ssp

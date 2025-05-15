@@ -17,6 +17,8 @@
 
 tuiterm_env
 
+save_vars { INTERNAL_GDBFLAGS } {
+set INTERNAL_GDBFLAGS [string map {".Andesgdbinit" ""} $INTERNAL_GDBFLAGS]
 foreach_with_prefix lines { 1 2 3 4 5 6 7 } {
     Term::clean_restart $lines 80
 
@@ -26,4 +28,5 @@ foreach_with_prefix lines { 1 2 3 4 5 6 7 } {
     }
 
     Term::check_region_contents "has prompt" 0 0 80 $lines "$gdb_prompt"
+}
 }

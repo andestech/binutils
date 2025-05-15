@@ -271,6 +271,7 @@ TARGET32_LIBOPCODES_CFILES = \
 LIBOPCODES_CFILES = \
 	$(TARGET32_LIBOPCODES_CFILES) \
 	$(TARGET64_LIBOPCODES_CFILES) \
+	aes.c \
 	dis-buf.c \
 	dis-init.c \
 	disassemble.c
@@ -297,7 +298,7 @@ endif
 	$(AM_V_CC)$(LTCOMPILE) -c -o $@ @archdefs@ $(srcdir)/disassemble.c
 endif
 
-libopcodes_la_SOURCES =  dis-buf.c disassemble.c dis-init.c
+libopcodes_la_SOURCES =  aes.c dis-buf.c disassemble.c dis-init.c
 libopcodes_la_DEPENDENCIES = $(OFILES) @SHARED_DEPENDENCIES@
 libopcodes_la_LIBADD = $(OFILES) @SHARED_LIBADD@
 libopcodes_la_LDFLAGS += -release `cat ../bfd/libtool-soversion` @SHARED_LDFLAGS@

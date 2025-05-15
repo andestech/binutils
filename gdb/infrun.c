@@ -4181,6 +4181,11 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
     return (ecs->ws.kind () != TARGET_WAITKIND_IGNORE);
   };
 
+  if (!target_async_permitted) {
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, random_selector inferior=0x%x ", selected);
+    selected = current_inferior ();
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, new_random_selector inferior=0x%x ", selected);
+  }
   /* Needed in 'all-stop + target-non-stop' mode, because we end up
      here spuriously after the target is all stopped and we've already
      reported the stop to the user, polling for events.  */
@@ -5804,7 +5809,12 @@ handle_no_resumed (struct execution_control_state *ecs)
   inferior *curr_inf = current_inferior ();
 
   scoped_restore_current_thread restore_thread;
-  update_thread_list ();
+
+  for (auto *target : all_non_exited_process_targets ())
+    {
+      switch_to_target_no_thread (target);
+      update_thread_list ();
+    }
 
   /* If:
 

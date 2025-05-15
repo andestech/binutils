@@ -1,4 +1,4 @@
-#as: -march=rv64im_zba_zbb_zcb
+#as: -march=rv64im_zba_zbb_zcb_xandes
 #objdump: -d -Mno-aliases
 
 .*:[ 	]+file format .*
@@ -30,3 +30,4 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+9ff5[ 	]+c.not[ 	]+a5
 [ 	]+[0-9a-f]+:[ 	]+9c5d[ 	]+c.mul[ 	]+s0,a5
 [ 	]+[0-9a-f]+:[ 	]+9cd1[ 	]+c.mul[ 	]+s1,a2
+[ 	]+[0-9a-f]+:[ 	]+8004[ 	]+c.lbu[ 	]+s1,0\(s0\)
