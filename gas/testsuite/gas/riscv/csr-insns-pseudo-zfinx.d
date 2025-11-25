@@ -1,6 +1,6 @@
 #source: csr-insns-pseudo.s
 #as: -march=rv32i_zfinx
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

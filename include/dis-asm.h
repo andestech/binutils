@@ -483,6 +483,10 @@ extern void init_disassemble_info (struct disassemble_info *dinfo, void *stream,
 				   fprintf_ftype fprintf_func,
 				   fprintf_styled_ftype fprintf_styled_func);
 
+/* { Andes  */
+extern char *andes_ace_load_hooks (const char *arg);
+/* } Andes  */
+
 /* For compatibility with existing code.  */
 #define INIT_DISASSEMBLE_INFO(INFO, STREAM, FPRINTF_FUNC, FPRINTF_STYLED_FUNC)  \
   init_disassemble_info (&(INFO), (STREAM), (fprintf_ftype) (FPRINTF_FUNC), \

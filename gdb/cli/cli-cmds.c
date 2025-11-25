@@ -1282,6 +1282,10 @@ list_command (const char *arg, int from_tty)
 	      frame_info_ptr frame = get_selected_frame (nullptr);
 	      CORE_ADDR curr_pc = get_frame_pc (frame);
 	      cursal = find_pc_line (curr_pc, 0);
+        /* if NDS define cu_overlay_debugging, skip reference overlay mapping compunits */
+        extern unsigned int nds_cu_overlay_debugging;
+        if (nds_cu_overlay_debugging && cursal.symtab == NULL)
+          return;
 	    }
 	  else
 	    {

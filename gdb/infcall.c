@@ -1394,7 +1394,7 @@ call_function_by_hand_dummy (struct value *function,
        will be caught and printed somewhere else in GDB.  We want new threads
        to be printed before the error message, otherwise it looks odd; the
        threads appear after GDB has reported a stop.  */
-    update_thread_list ();
+    //update_thread_list ();
 
     if (call_thread->state != THREAD_EXITED)
       {

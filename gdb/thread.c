@@ -1054,14 +1054,20 @@ should_print_thread (const char *requested_threads, int default_inf_num,
       if (!in_list)
 	return false;
     }
-
+  if (thr->inf->fake_pid_p == true) {
+    if (pid != -1 && thr->inf->num != pid) {
+      if (requested_threads != NULL && *requested_threads != '\0')
+        error (_("Requested thread not found in requested process"));
+      return 0;
+    }
+  } else {
   if (pid != -1 && thr->ptid.pid () != pid)
     {
       if (requested_threads != NULL && *requested_threads != '\0')
 	error (_("Requested thread not found in requested process"));
       return false;
     }
-
+  }
   if (thr->state == THREAD_EXITED)
     return false;
 
@@ -1578,6 +1584,7 @@ thread_try_catch_cmd (thread_info *thr, std::optional<int> ada_task,
 	  if (!flags.quiet)
 	    gdb_printf ("%s", thr_header.c_str ());
 	  gdb_printf ("%s", cmd_result.c_str ());
+		gdb_flush (gdb_stdout);
 	}
     }
   catch (const gdb_exception_error &ex)

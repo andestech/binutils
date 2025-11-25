@@ -1,4 +1,4 @@
-#as:
+#as: -march=rv32i
 #source: variant_cc.s
 #readelf: -Ws
 

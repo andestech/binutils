@@ -1,6 +1,6 @@
-#as:
+#as: -march=rv32i
 #source: mapping.s
-#objdump: -d
+#objdump: -d -M_no-prefer
 
 .*:[ 	]+file format .*
 
@@ -9,13 +9,13 @@ Disassembly of section .text.cross.section.A:
 
 0+000 <funcA>:
 [ 	]+[0-9a-f]+:[ 	]+4505[ 	]+li[ 	]+a0,1
-[ 	]+[0-9a-f]+:[ 	]+bffd[ 	]+j[ 	]+0 <funcA>
+[ 	]+[0-9a-f]+:[ 	]+bffd[ 	]+j[ 	]+0x0 <funcA>
 
 Disassembly of section .text.corss.section.B:
 
 0+000 <funcB>:
 [ 	]+[0-9a-f]+:[ 	]+4509[ 	]+li[ 	]+a0,2
-[ 	]+[0-9a-f]+:[ 	]+fffff06f[ 	]+j[ 	]+0 <funcB>
+[ 	]+[0-9a-f]+:[ 	]+fffff06f[ 	]+j[ 	]+0x0 <funcB>
 
 Disassembly of section .text.data:
 
@@ -34,7 +34,6 @@ Disassembly of section .text.odd.align.start.insn:
 [ 	]+[0-9a-f]+:[ 	]+00[ 	]+.byte[ 	]+0x00
 [ 	]+[0-9a-f]+:[ 	]+00000013[ 	]+nop
 [ 	]+[0-9a-f]+:[ 	]+00200513[ 	]+li[ 	]+a0,2
-[ 	]+[0-9a-f]+:[ 	]+00000013[ 	]+nop
 
 Disassembly of section .text.odd.align.start.data:
 
@@ -88,6 +87,7 @@ Disassembly of section .text.relax.align:
 0+000 <.text.relax.align>:
 [ 	]+[0-9a-f]+:[ 	]+0001[ 	]+nop
 [ 	]+[0-9a-f]+:[ 	]+4505[ 	]+li[ 	]+a0,1
+[ 	]+[0-9a-f]+:[ 	]+0001[ 	]+nop
 [ 	]+[0-9a-f]+:[ 	]+00000013[ 	]+nop
 [ 	]+[0-9a-f]+:[ 	]+00200513[ 	]+li[ 	]+a0,2
-[ 	]+[0-9a-f]+:[ 	]+00000013[ 	]+nop
+[ 	]+[0-9a-f]+:[ 	]+0001[ 	]+nop

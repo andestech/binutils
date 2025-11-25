@@ -166,7 +166,10 @@ ctf_dynhash_create (ctf_hash_fun hash_fun, ctf_hash_eq_fun eq_fun,
   if (key_free || value_free)
     dynhash = malloc (sizeof (ctf_dynhash_t));
   else
-    dynhash = malloc (offsetof (ctf_dynhash_t, key_free));
+    {
+      void *p = malloc (offsetof (ctf_dynhash_t, key_free));
+      dynhash = p;
+    }
   if (!dynhash)
     return NULL;
 
@@ -219,7 +222,10 @@ ctf_hashtab_insert (struct htab *htab, void *key, void *value,
       if (key_free || value_free)
 	*slot = malloc (sizeof (ctf_helem_t));
       else
-	*slot = malloc (offsetof (ctf_helem_t, owner));
+	{
+	  void *p = malloc (offsetof (ctf_helem_t, owner));
+	  *slot = p;
+	}
       if (!*slot)
 	return NULL;
       (*slot)->key = key;

@@ -326,6 +326,12 @@ _start:
 	.cfi_offset minstretcfg, 3208
 	.cfi_offset mcyclecfgh, 7300
 	.cfi_offset minstretcfgh, 7304
+	# Smcsrind extension (except miselect/mireg in Smaia)
+	.cfi_offset mireg2, 3400
+	.cfi_offset mireg3, 3404
+	.cfi_offset mireg4, 3412
+	.cfi_offset mireg5, 3416
+	.cfi_offset mireg6, 3420
 	# Smstateen extension
 	.cfi_offset mstateen0, 3120
 	.cfi_offset mstateen1, 3124
@@ -400,11 +406,24 @@ _start:
 	.cfi_offset mhpmevent29h, 7412
 	.cfi_offset mhpmevent30h, 7416
 	.cfi_offset mhpmevent31h, 7420
+	# Sscsrind extension (except {v,}si{select,reg} in Ssaia)
+	.cfi_offset sireg2, 1352
+	.cfi_offset sireg3, 1356
+	.cfi_offset sireg4, 1364
+	.cfi_offset sireg5, 1368
+	.cfi_offset sireg6, 1372
+	.cfi_offset vsireg2, 2376
+	.cfi_offset vsireg3, 2380
+	.cfi_offset vsireg4, 2388
+	.cfi_offset vsireg5, 2392
+	.cfi_offset vsireg6, 2396
 	# Sstc extension
 	.cfi_offset stimecmp, 1332
 	.cfi_offset stimecmph, 1396
 	.cfi_offset vstimecmp, 2356
 	.cfi_offset vstimecmph, 2420
+	# Zicfiss extension
+	.cfi_offset ssp, 68
 	# dropped
 	.cfi_offset ubadaddr, 268	# aliases
 	.cfi_offset sbadaddr, 1292	# aliases
@@ -447,7 +466,6 @@ _start:
 	.cfi_offset hcontext, 6816
 	.cfi_offset scontext, 5792
 	.cfi_offset mcontext, 7840
-	.cfi_offset mscontext, 7848
 	.cfi_offset mcontrol, 7812	# aliases
 	.cfi_offset mcontrol6, 7812	# aliases
 	.cfi_offset icount, 7812	# aliases

@@ -22,6 +22,10 @@
 
 #include <chrono>
 
+#if defined(_WIN32)
+extern void nds_remote_unpush_target(void);
+#endif
+
 #ifdef HAVE_POLL
 #if defined (HAVE_POLL_H)
 #include <poll.h>
@@ -558,6 +562,11 @@ handle_file_event (file_handler *file_ptr, int ready_mask)
 	  warning (_("Exception condition detected on fd %d"),
 		   file_ptr->fd);
 	  file_ptr->error = 1;
+#if defined(_WIN32)
+		warning ("GDB_EXCEPTION, ready_mask=0x%x",ready_mask);
+                nds_remote_unpush_target();
+		return;
+#endif
 	}
       else
 	file_ptr->error = 0;

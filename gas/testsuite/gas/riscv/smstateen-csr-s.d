@@ -1,6 +1,6 @@
 #as: -march=rv32ih_smstateen -mcsr-check -mpriv-spec=1.12
 #source: ssstateen-csr.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

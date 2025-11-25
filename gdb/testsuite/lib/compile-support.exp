@@ -24,10 +24,10 @@ proc _do_check_compile {expr} {
 
     set result ""
     gdb_test_multiple "compile code -- $expr;" "check for working compile command" {
-	"Could not load libcc1.*\r\n$gdb_prompt $" {
+	-re "Could not load libcc1.*\r\n$gdb_prompt $" {
 	    set result "could not find libcc1"
 	}
-	"Could not load libcp1.*\r\n$gdb_prompt $" {
+	-re "Could not load libcp1.*\r\n$gdb_prompt $" {
 	    set result "could not find libcp1"
 	}
 	-re "WARNING .* there are active plugins, do not report this" {

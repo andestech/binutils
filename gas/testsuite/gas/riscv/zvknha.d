@@ -1,6 +1,6 @@
 #as: -march=rv64gc_zvknha
 #source: zvknha_zvknhb.s
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

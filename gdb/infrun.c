@@ -1456,7 +1456,7 @@ struct step_over_info
    breakpoint, or stepping to complete a non-continuable
    watchpoint.  */
 static struct step_over_info step_over_info;
-
+static unsigned int nds_step_over_info[512];
 /* Record the address of the breakpoint/instruction we're currently
    stepping over.
    N.B. We record the aspace and address now, instead of say just the thread,
@@ -1467,6 +1467,8 @@ set_step_over_info (const address_space *aspace, CORE_ADDR address,
 		    int nonsteppable_watchpoint_p,
 		    int thread)
 {
+  if ((thread >= 0) && (thread < 512))
+    nds_step_over_info[thread] = 1;
   step_over_info.aspace = aspace;
   step_over_info.address = address;
   step_over_info.nonsteppable_watchpoint_p = nonsteppable_watchpoint_p;
@@ -3933,8 +3935,10 @@ for_each_just_stopped_thread (for_each_just_stopped_thread_callback_func func)
   else
     {
       /* In all-stop mode, all threads have stopped.  */
-      for (thread_info *tp : all_non_exited_threads ())
-	func (tp);
+      func (inferior_thread ());
+			/*
+			for (thread_info *tp : all_non_exited_threads ())
+	func (tp);*/
     }
 }
 
@@ -4181,6 +4185,11 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
     return (ecs->ws.kind () != TARGET_WAITKIND_IGNORE);
   };
 
+  if (!target_async_permitted) {
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, random_selector inferior=0x%x ", selected);
+    selected = current_inferior ();
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, new_random_selector inferior=0x%x ", selected);
+  }
   /* Needed in 'all-stop + target-non-stop' mode, because we end up
      here spuriously after the target is all stopped and we've already
      reported the stop to the user, polling for events.  */
@@ -5804,7 +5813,12 @@ handle_no_resumed (struct execution_control_state *ecs)
   inferior *curr_inf = current_inferior ();
 
   scoped_restore_current_thread restore_thread;
-  update_thread_list ();
+
+  for (auto *target : all_non_exited_process_targets ())
+    {
+      switch_to_target_no_thread (target);
+      update_thread_list ();
+    }
 
   /* If:
 
@@ -6664,8 +6678,11 @@ finish_step_over (struct execution_control_state *ecs)
       /* If we're stepping over a breakpoint with all threads locked,
 	 then only the thread that was stepped should be reporting
 	 back an event.  */
-      gdb_assert (ecs->event_thread->control.trap_expected);
-
+			//gdb_printf ("tp->global_num=%d,  %d\n",ecs->event_thread->global_num, nds_step_over_info[ecs->event_thread->global_num]);
+			if (nds_step_over_info[ecs->event_thread->global_num] == 1) {
+				nds_step_over_info[ecs->event_thread->global_num] = 0;
+				gdb_assert (ecs->event_thread->control.trap_expected);
+			}
       update_thread_events_after_step_over (ecs->event_thread, ecs->ws);
 
       clear_step_over_info ();

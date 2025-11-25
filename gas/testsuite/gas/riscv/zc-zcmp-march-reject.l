@@ -1,0 +1,25 @@
+.*: Assembler messages:
+.*:.*: Error: unrecognized opcode `c.flw fa0,0\(a0\)', extension `f' and `c', or `f' and `zcf' required
+.*:.*: Error: unrecognized opcode `c.flw fa0,0\(sp\)', extension `f' and `c', or `f' and `zcf' required
+.*:.*: Error: unrecognized opcode `c.fsw fa0,0\(a0\)', extension `f' and `c', or `f' and `zcf' required
+.*:.*: Error: unrecognized opcode `c.fsw fs2,0\(sp\)', extension `f' and `c', or `f' and `zcf' required
+.*:.*: Error: unrecognized opcode `c.lbu x9,1\(x8\)', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.lh x9,2\(x14\)', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.lhu x9,2\(x14\)', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.sb x9,1\(x8\)', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.sh x9,2\(x9\)', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.zext.b x8', extension `zcb' required
+.*:.*: Error: unrecognized opcode `c.sext.b x15', extension `zcb' and `zbb' required
+.*:.*: Error: unrecognized opcode `c.zext.h x8', extension `zcb' and `zbb' required
+.*:.*: Error: unrecognized opcode `c.sext.h a0', extension `zcb' and `zbb' required
+.*:.*: Error: unrecognized opcode `c.zext.w x8'
+.*:.*: Error: unrecognized opcode `c.mul x15,x15', extension `zcb' and `zmmul', or `zcb' and `m' required
+.*:.*: Error: unrecognized opcode `c.not x15', extension `zcb' required
+.*:.*: Error: unrecognized opcode `cm.push.e \{ra\},-64'
+.*:.*: Error: unrecognized opcode `cm.pop.e \{ra\},64'
+.*:.*: Error: unrecognized opcode `cm.popret.e \{ra\},64'
+.*:.*: Error: unrecognized opcode `cm.popretz.e \{ra\},64'
+.*:.*: Error: unrecognized opcode `cm.mva01s.e s0,s7'
+.*:.*: Error: unrecognized opcode `cm.mvsa01.e s0,s7'
+.*:.*: Error: unrecognized opcode `cm.jt 0', extension `zcmt' required
+.*:.*: Error: unrecognized opcode `cm.jalt 32', extension `zcmt' required

@@ -1,6 +1,6 @@
 # source: float16.s
 # objdump: -sj .data
-# as: -mlittle-endian
+# as: -march=rv32i -mlittle-endian
 
 .*:[ 	]+file format .*littleriscv
 

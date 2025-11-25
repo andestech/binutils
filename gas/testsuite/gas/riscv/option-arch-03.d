@@ -1,4 +1,4 @@
-#as:
+#as: -march=rv32i
 #readelf: -A
 #source: option-arch-03.s
 

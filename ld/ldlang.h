@@ -650,6 +650,10 @@ extern void lang_add_data
   (int, union etree_union *);
 extern void lang_add_string
   (const char *);
+/* { Andes */
+extern void lang_add_ict_entry
+  (bfd_vma, const char *, union etree_union *);
+/* } Andes */
 extern void lang_add_reloc
   (bfd_reloc_code_real_type, reloc_howto_type *, asection *, const char *,
    union etree_union *);

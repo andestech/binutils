@@ -2831,6 +2831,11 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
   CORE_ADDR best_cust_range = 0;
   struct bound_minimal_symbol msymbol;
 
+  /* if NDS define cu_overlay_debugging, skip reference overlay mapping compunits */
+  extern unsigned int nds_cu_overlay_debugging;
+  if (overlay_debugging && nds_cu_overlay_debugging)
+    return NULL;
+
   /* If we know that this is not a text address, return failure.  This is
      necessary because we loop based on the block's high and low code
      addresses, which do not include the data ranges, and because

@@ -1,10 +1,11 @@
-#as: -mno-relax
+#as: -march=rv32i -mno-relax
 #objdump: -r
 
 .*:[ 	]+file format .*
 
 RELOCATION RECORDS FOR .*
 .*
+0+0 R_RISCV_RELAX_ENTRY[ 	]+\*ABS\*\-0x80000000
 0+0 R_RISCV_HI20.*
 0+4 R_RISCV_LO12_I.*
 0+8 R_RISCV_PCREL_HI20.*
