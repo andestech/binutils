@@ -558,6 +558,7 @@ eh_frame_convert_frag (fragS *frag)
 
     case 7:
       gas_assert (diff == 0);
+      loc4_frag->fr_literal[loc4_fix] = DW_CFA_nop;
       frag->fr_fix -= 8;
       break;
 

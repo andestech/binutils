@@ -499,6 +499,7 @@ xmemdup0 (const char *in, size_t len)
 struct expressionS;
 struct fix;
 typedef struct symbol symbolS;
+typedef struct local_symbol local_symbolS;
 typedef struct frag fragS;
 
 /* literal.c */

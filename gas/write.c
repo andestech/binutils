@@ -2361,6 +2361,12 @@ write_object_file (void)
 
   bfd_map_over_sections (stdoutput, fix_segment, (char *) 0);
 
+/* { Andes */
+#ifdef __ANDES__
+  b35102_print_log ();
+#endif
+/* } Andes */
+
   /* Set up symbol table, and write it out.  */
   if (symbol_rootP)
     {
