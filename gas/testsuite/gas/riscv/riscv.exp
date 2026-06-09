@@ -18,7 +18,25 @@
 # Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
 # MA 02110-1301, USA.
 
-if [istarget riscv*-*-*] {
-    run_dump_tests [lsort [glob -nocomplain $srcdir/$subdir/*.d]]
+if {[istarget "riscv*-*-*"]} {
+
+    set all_tests [lsort [glob -nocomplain $srcdir/$subdir/*.d]]
+
+    set filtered_tests {}
+
+    if {[info exists ::env(SKIP_V5)] && $::env(SKIP_V5) == "1"} {
+	foreach t $all_tests {
+	    set base [file tail $t]
+	    if {![string match "x-andes*" $base] &&
+		![string match "xnexecit*" $base] &&
+		![string match "xefhw*" $base]} {
+		lappend filtered_tests $t
+	    }
+	}
+    } else {
+	set filtered_tests $all_tests
+    }
+
+    run_dump_tests $filtered_tests
     run_list_test "align-1"
 }

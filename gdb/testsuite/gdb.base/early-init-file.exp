@@ -24,6 +24,11 @@ standard_testfile
 if {[build_executable "failed to build" $testfile $srcfile]} {
     return -1
 }
+global INTERNAL_GDBFLAGS
+if [string match *Andesgdbinit* $INTERNAL_GDBFLAGS] {
+    send_user "UNTESTED: gdb.base/early-init-file.exp: skipping tests due to loading .Andesgdbinit\n"
+    return
+}
 
 set custom_signal_handle_re \
     "warning: Found custom handler for signal $decimal \(\[^\r\n\]+\) preinstalled\."

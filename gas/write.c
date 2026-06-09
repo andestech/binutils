@@ -471,7 +471,7 @@ cvt_frag_to_fill (segT sec ATTRIBUTE_UNUSED, fragS *fragP)
 	  }
 
 	size = output_leb128 (fragP->fr_literal + fragP->fr_fix, value,
-			      fragP->fr_subtype);
+			      fragP->fr_subtype, true);
 
 	fragP->fr_fix += size;
 	fragP->fr_type = rs_fill;
@@ -2353,6 +2353,12 @@ write_object_file (void)
 
   bfd_map_over_sections (stdoutput, fix_segment, (char *) 0);
 
+/* { Andes */
+#ifdef __ANDES__
+  b35102_print_log ();
+#endif
+/* } Andes */
+
   /* Set up symbol table, and write it out.  */
   if (symbol_rootP)
     {
@@ -3115,7 +3121,7 @@ relax_segment (struct frag *segment_frag_root, segT segment, int pass)
 		  offsetT size;
 
 		  value = resolve_symbol_value (fragP->fr_symbol);
-		  size = sizeof_leb128 (value, fragP->fr_subtype);
+		  size = sizeof_leb128 (value, fragP->fr_subtype) + 1;
 		  growth = size - fragP->fr_offset;
 		  fragP->fr_offset = size;
 		}

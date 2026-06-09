@@ -1,3 +1,3 @@
-#as:
+#as: -march=rv32i
 #source: insn-fail.s
 #error_output: insn-fail.l

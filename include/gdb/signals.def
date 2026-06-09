@@ -49,7 +49,7 @@ SET (GDB_SIGNAL_VTALRM, 26, "SIGVTALRM", "Virtual timer expired")
 SET (GDB_SIGNAL_PROF, 27, "SIGPROF", "Profiling timer expired")
 SET (GDB_SIGNAL_WINCH, 28, "SIGWINCH", "Window size changed")
 SET (GDB_SIGNAL_LOST, 29, "SIGLOST", "Resource lost")
-SET (GDB_SIGNAL_USR1, 30, "SIGUSR1", "User defined signal 1")
+SET (GDB_SIGNAL_USR1, 30, "SIGUSR1", "User defined signal 1.\nThis signal is triggered when the trace buffer is full")
 SET (GDB_SIGNAL_USR2, 31, "SIGUSR2", "User defined signal 2")
 SET (GDB_SIGNAL_PWR, 32, "SIGPWR", "Power fail/restart")
 /* Similar to SIGIO.  Perhaps they should have the same number.  */

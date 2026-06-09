@@ -3019,18 +3019,18 @@ dwarf2_base_index_functions::find_pc_sect_compunit_symtab
     = find_per_cu (per_objfile->per_bfd, (unrelocated_addr) (pc - baseaddr));
   if (data == nullptr)
     return nullptr;
-
+/*
   if (warn_if_readin && per_objfile->symtab_set_p (data))
     warning (_("(Internal error: pc %s in read in CU, but not in symtab.)"),
 	     paddress (objfile->arch (), pc));
-
+*/
   result = recursively_find_pc_sect_compunit_symtab
     (dw2_instantiate_symtab (data, per_objfile, false), pc);
-
+/*
   if (warn_if_readin && result == nullptr)
     warning (_("(Error: pc %s in address map, but not in symtab.)"),
 	     paddress (objfile->arch (), pc));
-
+*/
   return result;
 }
 

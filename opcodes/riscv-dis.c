@@ -28,6 +28,7 @@
 #include "elf-bfd.h"
 #include "elf/riscv.h"
 #include "elfxx-riscv.h"
+#include "aes.h"
 
 #include <stdint.h>
 #include <ctype.h>
@@ -50,16 +51,28 @@ static riscv_parse_subset_t riscv_rps_dis =
   &xlen,		/* xlen.  */
   &default_isa_spec,	/* isa_spec.  */
   false,		/* check_unknown_prefixed_ext.  */
+  STATE_DEFAULT,	/* state.  */
+  false,		/* EXEC.IT enabled?  */
 };
 
 struct riscv_private_data
 {
   bfd_vma gp;
   bfd_vma print_addr;
+  bfd_vma jvt_base;
+  bfd_vma jvt_start; /* real table start.  */
+  bfd_vma jvt_end;
   bfd_vma hi_addr[OP_MASK_RD + 1];
+  /* { Andes */
+#define FLAG_EXECIT (1u << 0)
+#define FLAG_EXECIT_TAB (1u << 1)
+  bfd_vma flags;
+  /* } Andes */
   bool to_print_addr;
   bool has_gp;
 };
+
+typedef struct riscv_private_data private_data_t;
 
 /* Used for mapping symbols.  */
 static int last_map_symbol = -1;
@@ -75,6 +88,43 @@ static const char (*riscv_fpr_names)[NRC];
 /* If set, disassemble as most general instruction.  */
 static bool no_aliases = false;
 
+/* If set, disassemble numeric register names instead of ABI names.  */
+static int numeric;
+
+/* { Andes */
+/* If set, disassemble as prefer ISA instruction.  */
+static int no_prefer;
+
+typedef struct
+{
+  bool has_c;
+  bool has_zcb;
+  bool has_xnexecit;
+} args_t;
+
+static void andes_execit_info (bfd_vma pc ATTRIBUTE_UNUSED,
+			       disassemble_info *info, uint32_t execit_index);
+static void andes_find_op_name_match (const char *mne, insn_t match,
+				      const riscv_opcode_t **hash,
+				      const riscv_opcode_t **pop);
+/* } Andes */
+
+/* { Andes ACE */
+/* Pointers for storing symbols from the ACE ECA file.  */
+ace_keyword_t *ace_keys;
+ace_op_t *ace_ops;
+struct riscv_opcode *ace_opcs;
+/* Represent if the ACE ECA file is loaded successfully.  */
+bool ace_eca_load_success = false;
+/* Debugging mode:
+   Show the ACE insn even if the ACE ECA file is not loaded successfully.  */
+static int debugging;
+
+char *andes_ace_load_hooks (const char *arg);
+static void andes_print_ace_args (const char **args, insn_t l,
+				  disassemble_info *info);
+/* } Andes ACE */
+
 
 /* Set default RISC-V disassembler options.  */
 
@@ -84,6 +134,8 @@ set_default_riscv_dis_options (void)
   riscv_gpr_names = riscv_gpr_names_abi;
   riscv_fpr_names = riscv_fpr_names_abi;
   no_aliases = false;
+  numeric = 0;
+  no_prefer = 0;
 }
 
 /* Parse RISC-V disassembler option (without arguments).  */
@@ -97,7 +149,16 @@ parse_riscv_dis_option_without_args (const char *option)
     {
       riscv_gpr_names = riscv_gpr_names_numeric;
       riscv_fpr_names = riscv_fpr_names_numeric;
+      numeric = 1;
     }
+  /* { Andes */
+  else if (strcmp (option, "_no-prefer") == 0)
+    no_prefer = 1;
+  /* } Andes */
+  /* { Andes ACE */
+  else if (strcmp (option, "debugging") == 0)
+    debugging = 1;
+  /* } Andes ACE */
   else
     return false;
   return true;
@@ -151,6 +212,18 @@ parse_riscv_dis_option (const char *option)
 				 option, value, name);
 	}
     }
+  /* { Andes ACE */
+  /* Load the ACE ECA file if the ACE option is enable.  */
+  else if (strcmp (option, "ace") == 0)
+    {
+      char *err = andes_ace_load_hooks ((const char *)value);
+      if (err)
+	{
+	  opcodes_error_handler (_("failed to load the ACE ECA file: %s"), err);
+	  free (err);
+	}
+    }
+  /* } Andes ACE */
   else
     {
       /* xgettext:c-format */
@@ -215,6 +288,140 @@ maybe_print_address (struct riscv_private_data *pd, int base_reg, int offset,
     pd->print_addr = (bfd_vma)(uint32_t)pd->print_addr;
 }
 
+/* Print table jump index.  */
+
+static bool
+print_jvt_index (disassemble_info *info, unsigned int index)
+{
+  bfd_vma entry_value;
+  bfd_vma memaddr;
+  int status;
+
+  bfd_byte packet[8] = { 0 };
+  struct riscv_private_data *pd = info->private_data;
+
+  memaddr = pd->jvt_base + index * (xlen / 8);
+  status = (*info->read_memory_func) (memaddr, packet, xlen / 8, info);
+  if (status != 0)
+    {
+      /* Try to read directly from table jump section.  */
+      static asection *section = NULL;
+      static bfd_vma bias = 0;
+      static bool no_more_try = false;
+      if (!section && !no_more_try)
+	{
+	  section = bfd_get_section_by_name (info->section->owner,
+					     TABLE_JUMP_SEC_NAME);
+	  /* If not found, try symbol "_JVT_BASE_".  */
+	  if (section == NULL)
+	    {
+	      /* TODO: find the existed API to do this.  */
+	      int i;
+	      for (i = 0; i < info->symtab_size; i++)
+		{
+		  if (0 == strcmp ("_JVT_BASE_", info->symtab[i]->name)
+		      && 0 != strcmp ("*ABS*", info->symtab[i]->section->name))
+		    {
+		      section = info->symtab[i]->section;
+		      bias = info->symtab[i]->value;
+		      break;
+		    }
+		}
+	    }
+	  /* Lookup once only.  */
+	  if (section == NULL)
+	    no_more_try = true;
+	}
+      if (section)
+	{
+	  int off = pd->jvt_base + index * (xlen/8) - pd->jvt_start;
+	  if (bfd_get_section_contents (section->owner, section, packet,
+					off + bias, (xlen / 8)))
+	    status = 0;
+	}
+    }
+  if (status != 0)
+    return false;
+
+  entry_value = xlen == 32 ? bfd_getl32 (packet) : bfd_getl64 (packet);
+
+  maybe_print_address (pd, 0, entry_value, 0);
+  return true;
+}
+
+/* Print table jump entry value.  */
+
+static bool
+print_jvt_entry_value (disassemble_info *info, bfd_vma memaddr)
+{
+  bfd_vma entry_value;
+  int status;
+  struct riscv_private_data *pd = info->private_data;
+  bfd_byte packet[8] = { 0 };
+  unsigned index = (memaddr - pd->jvt_base) / (xlen / 8);
+
+  status = (*info->read_memory_func) (memaddr, packet, xlen / 8, info);
+  if (status != 0)
+    return false;
+
+  entry_value = xlen == 32 ? bfd_getl32 (packet) : bfd_getl64 (packet);
+
+  info->target = entry_value;
+  (*info->fprintf_func) (info->stream, "index %u # ", index);
+  (*info->print_address_func) (info->target, info);
+  return true;
+}
+
+/* Get Zcmp rlist field.  */
+
+static void
+print_rlist (disassemble_info *info, insn_t l)
+{
+  unsigned rlist = (int)EXTRACT_OPERAND (RLIST, l);
+  unsigned r_start = numeric ? X_S2 : X_S0;
+  info->fprintf_func (info->stream, "%s", riscv_gpr_names[X_RA]);
+
+  if (rlist == 5)
+    info->fprintf_func (info->stream, ",%s", riscv_gpr_names[X_S0]);
+  else if (rlist == 6 || (numeric && rlist > 6))
+    info->fprintf_func (info->stream, ",%s-%s", riscv_gpr_names[X_S0],
+			riscv_gpr_names[X_S1]);
+
+  if (rlist == 15)
+    info->fprintf_func (info->stream, ",%s-%s", riscv_gpr_names[r_start],
+			riscv_gpr_names[X_S11]);
+  else if (rlist == 7 && numeric)
+    info->fprintf_func (info->stream, ",%s", riscv_gpr_names[X_S2]);
+  else if (rlist > 6)
+    info->fprintf_func (info->stream, ",%s-%s", riscv_gpr_names[r_start],
+			riscv_gpr_names[rlist + 11]);
+}
+
+/* Get Zcmp sp adjustment immediate.  */
+
+static int
+riscv_get_spimm (insn_t l)
+{
+  int spimm = riscv_get_base_spimm (l, &riscv_rps_dis);
+
+  spimm += EXTRACT_ZCMP_SPIMM (l);
+
+  if (((l ^ MATCH_CM_PUSH) & MASK_CM_PUSH) == 0)
+    spimm *= -1;
+
+  return spimm;
+}
+
+/* Get s-register regno by using sreg number.
+   e.g. the regno of s0 is 8, so
+   riscv_get_sregno (0) equals 8.  */
+
+static unsigned
+riscv_get_sregno (unsigned sreg_idx)
+{
+  return sreg_idx > 1 ? sreg_idx + 16 : sreg_idx + 8;
+}
+
 /* Print insn arguments for 32/64-bit code.  */
 
 static void
@@ -244,6 +451,7 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      break;
 	    case 't': /* RS2 x8-x15.  */
 	    case 'x': /* RS2 x8-x15.  */
+	      if (*(oparg) == 't' && *(oparg + 1) == '2') oparg++;
 	      print (info->stream, dis_style_register, "%s",
 		     riscv_gpr_names[EXTRACT_OPERAND (CRS2S, l) + 8]);
 	      break;
@@ -256,6 +464,7 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		     riscv_gpr_names[X_SP]);
 	      break;
 	    case 'V': /* RS2 */
+	      if (*(oparg + 1) == '2') oparg++;
 	      print (info->stream, dis_style_register, "%s",
 		     riscv_gpr_names[EXTRACT_OPERAND (CRS2, l)]);
 	      break;
@@ -329,8 +538,99 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      print (info->stream, dis_style_register, "%s",
 		     riscv_fpr_names[EXTRACT_OPERAND (CRS2S, l) + 8]);
 	      break;
+	    case 'Z': /* Zcm* extensions.  */
+	      switch (*++oparg)
+		{
+		case 'r':
+		  print_rlist (info, l);
+		  break;
+		case 'p':
+		  print (info->stream, dis_style_immediate, "%d",
+			 riscv_get_spimm (l));
+		  break;
+		case '1':
+		  print (info->stream, dis_style_register, "%s",
+			 riscv_gpr_names[riscv_get_sregno (
+			     EXTRACT_OPERAND (SREG1, l))]);
+		  break;
+		case '2':
+		  print (info->stream, dis_style_register, "%s",
+			 riscv_gpr_names[riscv_get_sregno (
+			     EXTRACT_OPERAND (SREG2, l))]);
+		  break;
+		case 'I':
+		case 'i':
+		  print (info->stream, dis_style_address_offset, "%lu",
+			 EXTRACT_ZCMP_TABLE_JUMP_INDEX (l));
+		  print_jvt_index (info, EXTRACT_ZCMP_TABLE_JUMP_INDEX (l));
+		  break;
+		}
+	      break;
+	    /* { Andes */
+	    case 'e': /* EXEC.IT */
+	      switch (*++oparg)
+		{
+		case 't':
+		  print (info->stream, dis_style_immediate, "#%d	!",
+			 (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  andes_execit_info (pc, info,
+				     (int)EXTRACT_RVC_EXECIT_IMM (l) >> 2);
+		  break;
+		case 'T':
+		  print (info->stream, dis_style_immediate, "#%d	!",
+			 (int)EXTRACT_RVC_NEXECIT_IMM (l) >> 2);
+		  andes_execit_info (pc, info,
+				     (int)EXTRACT_RVC_NEXECIT_IMM (l) >> 2);
+		  break;
+		}
+	      break;
+	    /* } Andes */
 	    }
 	  break;
+
+	/* { Andes */
+	case 'N':
+	  switch (*++oparg)
+	    {
+	    case 'c': /* rc */
+	      print (info->stream, dis_style_register, "%s",
+		     riscv_gpr_names[EXTRACT_OPERAND (RC, l)]);
+	      break;
+	    case 'd': /* rdp */
+	      print (info->stream, dis_style_register, "%s",
+		     riscv_gpr_names[rd]);
+	      break;
+	    case 's': /* rsp */
+	      print (info->stream, dis_style_register, "%s",
+		     riscv_gpr_names[rs1]);
+	      break;
+	    case 't': /* rtp */
+	      print (info->stream, dis_style_register, "%s",
+		     riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
+	      break;
+	    case '3': /* i3u */
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_PTYPE_IMM3U (l));
+	      break;
+	    case '4': /* i4u */
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_PTYPE_IMM4U (l));
+	      break;
+	    case '5': /* i5u */
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_PTYPE_IMM5U (l));
+	      break;
+	    case '6': /* i6u */
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_PTYPE_IMM6U (l));
+	      break;
+	    case 'f': /* i15s */
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_PTYPE_IMM15S (l));
+	      break;
+	    }
+	  break;
+	/* } Andes */
 
 	case 'V': /* RVV */
 	  switch (*++oparg)
@@ -365,27 +665,49 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    case 'b':
 	    case 'c':
 	      {
+		bool has_zvfofp8min = riscv_subset_supports (&riscv_rps_dis, "zvfofp8min");
+		bool has_zvfbfa = riscv_subset_supports (&riscv_rps_dis, "zvfbfa");
 		int imm = (*oparg == 'b') ? EXTRACT_RVV_VB_IMM (l)
 					  : EXTRACT_RVV_VC_IMM (l);
 		unsigned int imm_vlmul = EXTRACT_OPERAND (VLMUL, imm);
 		unsigned int imm_vsew = EXTRACT_OPERAND (VSEW, imm);
 		unsigned int imm_vta = EXTRACT_OPERAND (VTA, imm);
 		unsigned int imm_vma = EXTRACT_OPERAND (VMA, imm);
-		unsigned int imm_vtype_res = (imm >> 8);
+		unsigned int imm_alt = EXTRACT_OPERAND (ALT, imm);
+		unsigned int imm_vtype_res = (has_zvfofp8min || has_zvfbfa) ? (imm >> 9) : (imm >> 8);
 
-		if (imm_vsew < ARRAY_SIZE (riscv_vsew)
-		    && imm_vlmul < ARRAY_SIZE (riscv_vlmul)
-		    && imm_vta < ARRAY_SIZE (riscv_vta)
-		    && imm_vma < ARRAY_SIZE (riscv_vma)
-		    && !imm_vtype_res
-		    && riscv_vsew[imm_vsew] != NULL
-		    && riscv_vlmul[imm_vlmul] != NULL)
-		  print (info->stream, dis_style_text, "%s,%s,%s,%s",
-			 riscv_vsew[imm_vsew],
-			 riscv_vlmul[imm_vlmul], riscv_vta[imm_vta],
-			 riscv_vma[imm_vma]);
+		if ((has_zvfofp8min || has_zvfbfa) && imm_alt)
+		  {
+		    if (imm_vsew < ARRAY_SIZE (riscv_vsew_alt)
+			&& imm_vlmul < ARRAY_SIZE (riscv_vlmul)
+			&& imm_vta < ARRAY_SIZE (riscv_vta)
+			&& imm_vma < ARRAY_SIZE (riscv_vma)
+			&& !imm_vtype_res
+			&& riscv_vsew_alt[imm_vsew] != NULL
+			&& riscv_vlmul[imm_vlmul] != NULL)
+		      print (info->stream, dis_style_text, "%s,%s,%s,%s",
+			     riscv_vsew_alt[imm_vsew],
+			     riscv_vlmul[imm_vlmul], riscv_vta[imm_vta],
+			     riscv_vma[imm_vma]);
+		    else
+		      print (info->stream, dis_style_immediate, "%d", imm);
+		  }
 		else
-		  print (info->stream, dis_style_immediate, "%d", imm);
+		  {
+		    if (imm_vsew < ARRAY_SIZE (riscv_vsew)
+			&& imm_vlmul < ARRAY_SIZE (riscv_vlmul)
+			&& imm_vta < ARRAY_SIZE (riscv_vta)
+			&& imm_vma < ARRAY_SIZE (riscv_vma)
+			&& !imm_vtype_res
+			&& riscv_vsew[imm_vsew] != NULL
+			&& riscv_vlmul[imm_vlmul] != NULL)
+		      print (info->stream, dis_style_text, "%s,%s,%s,%s",
+			     riscv_vsew[imm_vsew],
+			     riscv_vlmul[imm_vlmul], riscv_vta[imm_vta],
+			     riscv_vma[imm_vma]);
+		    else
+		      print (info->stream, dis_style_immediate, "%d", imm);
+		  }
 	      }
 	      break;
 	    case 'i':
@@ -420,6 +742,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	case ')':
 	case '[':
 	case ']':
+	case '{':
+	case '}':
 	  print (info->stream, dis_style_text, "%c", *oparg);
 	  break;
 
@@ -436,6 +760,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 't':
+	  if (*(oparg + 1) == '2')
+	    oparg++;
 	  print (info->stream, dis_style_register, "%s",
 		 riscv_gpr_names[EXTRACT_OPERAND (RS2, l)]);
 	  break;
@@ -460,6 +786,11 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 		     riscv_pred_succ, ARRAY_SIZE (riscv_pred_succ));
 	  break;
 
+	case 'J':
+	  arg_print (info, EXTRACT_OPERAND (FENCE_TIME, l),
+		     riscv_fence_time, ARRAY_SIZE (riscv_fence_time));
+	  break;
+
 	case 'o':
 	  maybe_print_address (pd, rs1, EXTRACT_ITYPE_IMM (l), 0);
 	  /* Fall through.  */
@@ -481,8 +812,27 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 'a':
-	  info->target = EXTRACT_JTYPE_IMM (l) + pc;
-	  (*info->print_address_func) (info->target, info);
+	  /* { Andes */
+	  if (pd->flags & FLAG_EXECIT)
+	    {
+	      /* Check instruction in .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
+	      info->target |= (pc & 0xffe00000);
+	      (*info->print_address_func) (info->target, info);
+	    }
+	  else if (pd->flags & FLAG_EXECIT_TAB)
+	    {
+	      /* Check if decode .exec.itable.  */
+	      info->target = EXTRACT_UJTYPE_IMM_EXECIT_TAB (l);
+	      print (info->stream, dis_style_address_offset,
+		     "PC(31,21)|#0x%lx", (long)info->target);
+	    }
+	  /* } Andes */
+	  else
+	    {
+	      info->target = EXTRACT_JTYPE_IMM (l) + pc;
+	      (*info->print_address_func) (info->target, info);
+	    }
 	  break;
 
 	case 'p':
@@ -491,6 +841,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	  break;
 
 	case 'd':
+	  if (*(oparg + 1) == '2')
+	    oparg++;
 	  if ((l & MASK_AUIPC) == MATCH_AUIPC)
 	    pd->hi_addr[rd] = pc + EXTRACT_UTYPE_IMM (l);
 	  else if ((l & MASK_LUI) == MATCH_LUI)
@@ -568,18 +920,8 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	      }
 
 	    if (riscv_csr_hash[csr] != NULL)
-	      if (riscv_subset_supports (&riscv_rps_dis, "xtheadvector")
-		  && (csr == CSR_VSTART
-		      || csr == CSR_VXSAT
-		      || csr == CSR_VXRM
-		      || csr == CSR_VL
-		      || csr == CSR_VTYPE
-		      || csr == CSR_VLENB))
-		print (info->stream, dis_style_register, "%s",
-		       concat ("th.", riscv_csr_hash[csr], NULL));
-	      else
-		print (info->stream, dis_style_register, "%s",
-		       riscv_csr_hash[csr]);
+	      print (info->stream, dis_style_register, "%s",
+		     riscv_csr_hash[csr]);
 	    else
 	      print (info->stream, dis_style_immediate, "0x%x", csr);
 	    break;
@@ -643,118 +985,90 @@ print_insn_args (const char *oparg, insn_t l, bfd_vma pc, disassemble_info *info
 	    }
 	  break;
 
-	case 'X': /* Vendor-specific operands.  */
+	/* { Andes */
+	case 'g':
+	  info->target = EXTRACT_STYPE_IMM10 (l) + pc;
+	  (*info->print_address_func) (info->target, info);
+	  break;
+
+	case 'h':
+	  print (info->stream, dis_style_immediate, "%d",
+		 (int)EXTRACT_ITYPE_IMM6H (l));
+	  break;
+
+	case 'i':
+	  print (info->stream, dis_style_immediate, "%d",
+		 (int)EXTRACT_STYPE_IMM7 (l));
+	  break;
+
+	case 'k':
+	  print (info->stream, dis_style_immediate, "%d",
+		 (int)EXTRACT_TYPE_CIMM6 (l));
+	  break;
+
+	case 'l':
+	  print (info->stream, dis_style_immediate, "%d",
+		 (int)EXTRACT_ITYPE_IMM6L (l));
+	  break;
+
+	case 'G':
 	  switch (*++oparg)
 	    {
-	    case 't': /* Vendor-specific (T-head) operands.  */
-	      {
-		size_t n;
-		size_t s;
-		bool sign;
-		switch (*++oparg)
-		  {
-		  case 'V':
-		   ++oparg;
-		   if (*oparg != 'c')
-		      goto undefined_modifier;
-
-		    int imm = (*oparg == 'b') ? EXTRACT_RVV_VB_IMM (l)
-					      : EXTRACT_RVV_VC_IMM (l);
-		    unsigned int imm_vediv = EXTRACT_OPERAND (XTHEADVEDIV, imm);
-		    unsigned int imm_vlmul = EXTRACT_OPERAND (XTHEADVLMUL, imm);
-		    unsigned int imm_vsew = EXTRACT_OPERAND (XTHEADVSEW, imm);
-		    unsigned int imm_vtype_res
-		      = EXTRACT_OPERAND (XTHEADVTYPE_RES, imm);
-		    if (imm_vsew < ARRAY_SIZE (riscv_vsew)
-			&& imm_vlmul < ARRAY_SIZE (riscv_th_vlen)
-			&& imm_vediv < ARRAY_SIZE (riscv_th_vediv)
-			&& ! imm_vtype_res)
-		      print (info->stream, dis_style_text, "%s,%s,%s",
-			     riscv_vsew[imm_vsew], riscv_th_vlen[imm_vlmul],
-			     riscv_th_vediv[imm_vediv]);
-		    else
-		      print (info->stream, dis_style_immediate, "%d", imm);
-		    break;
-		  case 'l': /* Integer immediate, literal.  */
-		    oparg++;
-		    while (*oparg && *oparg != ',')
-		      {
-			print (info->stream, dis_style_immediate, "%c", *oparg);
-			oparg++;
-		      }
-		    oparg--;
-		    break;
-		  case 's': /* Integer immediate, 'XsN@S' ... N-bit signed immediate at bit S.  */
-		    sign = true;
-		    goto print_imm;
-		  case 'u': /* Integer immediate, 'XuN@S' ... N-bit unsigned immediate at bit S.  */
-		    sign = false;
-		    goto print_imm;
-		  print_imm:
-		    n = strtol (oparg + 1, (char **)&oparg, 10);
-		    if (*oparg != '@')
-		      goto undefined_modifier;
-		    s = strtol (oparg + 1, (char **)&oparg, 10);
-		    oparg--;
-
-		    if (!sign)
-		      print (info->stream, dis_style_immediate, "%lu",
-			     (unsigned long)EXTRACT_U_IMM (n, s, l));
-		    else
-		      print (info->stream, dis_style_immediate, "%li",
-			     (signed long)EXTRACT_S_IMM (n, s, l));
-		    break;
-		  default:
-		    goto undefined_modifier;
-		  }
-	      }
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LB_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_LB_IMM (l));
 	      break;
-	    case 'c': /* Vendor-specific (CORE-V) operands.  */
-	      switch (*++oparg)
-		{
-		  case '2':
-		    print (info->stream, dis_style_immediate, "%d",
-			((int) EXTRACT_CV_IS2_UIMM5 (l)));
-		    break;
-		  case '3':
-		    print (info->stream, dis_style_immediate, "%d",
-			((int) EXTRACT_CV_IS3_UIMM5 (l)));
-		    break;
-		  default:
-		    goto undefined_modifier;
-		}
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LH_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_LH_IMM (l));
 	      break;
-	    case 's': /* Vendor-specific (SiFive) operands.  */
-	      switch (*++oparg)
-		{
-		/* SiFive vector coprocessor interface.  */
-		case 'd':
-		  print (info->stream, dis_style_register, "0x%x",
-			 (unsigned) EXTRACT_OPERAND (RD, l));
-		  break;
-		case 't':
-		  print (info->stream, dis_style_register, "0x%x",
-			 (unsigned) EXTRACT_OPERAND (RS2, l));
-		  break;
-		case 'O':
-		  switch (*++oparg)
-		    {
-		    case '2':
-		      print (info->stream, dis_style_register, "0x%x",
-			     (unsigned) EXTRACT_OPERAND (XSO2, l));
-		      break;
-		    case '1':
-		      print (info->stream, dis_style_register, "0x%x",
-			     (unsigned) EXTRACT_OPERAND (XSO1, l));
-		      break;
-		    }
-		  break;
-		}
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LW_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_LW_IMM (l));
 	      break;
-	    default:
-	      goto undefined_modifier;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_LD_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_LD_IMM (l));
+	      break;
 	    }
 	  break;
+
+	case 'H':
+	  switch (*++oparg)
+	    {
+	    case 'b':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SB_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_SB_IMM (l));
+	      break;
+	    case 'h':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SH_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_SH_IMM (l));
+	      break;
+	    case 'w':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SW_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_SW_IMM (l));
+	      break;
+	    case 'd':
+	      maybe_print_address (pd, X_GP, EXTRACT_GPTYPE_SD_IMM (l), 0);
+	      print (info->stream, dis_style_immediate, "%d",
+		     (int)EXTRACT_GPTYPE_SD_IMM (l));
+	      break;
+	    }
+	  break;
+	/* } Andes */
+
+	/* { Andes ACE */
+	case 'X':
+	  andes_print_ace_args (&oparg, l, info);
+	  break;
+	/* } Andes ACE */
 
 	default:
 	undefined_modifier:
@@ -784,6 +1098,7 @@ riscv_disassemble_insn (bfd_vma memaddr,
   struct riscv_private_data *pd = info->private_data;
   int insnlen, i;
   bool printed;
+  static args_t args;
 
 #define OP_HASH_IDX(i) ((i) & (riscv_insn_length (i) == 2 ? 0x3 : OP_MASK_OP))
 
@@ -794,8 +1109,32 @@ riscv_disassemble_insn (bfd_vma memaddr,
 	if (!riscv_hash[OP_HASH_IDX (op->match)])
 	  riscv_hash[OP_HASH_IDX (op->match)] = op;
 
+      /* { Andes ACE */
+      /* Insert ACE opcode attributes into hash table if exists.  */
+      if (ace_eca_load_success)
+	{
+	  for (op = ace_opcs; op->name; op++)
+	    if (!riscv_hash[OP_HASH_IDX (op->match)])
+	      riscv_hash[OP_HASH_IDX (op->match)] = op;
+	}
+      /* } Andes ACE */
+
       init = true;
     }
+
+  /* { Andes */
+  args.has_c = riscv_multi_subset_supports (&riscv_rps_dis, INSN_CLASS_C);
+  args.has_zcb = riscv_subset_supports (&riscv_rps_dis, "zcb");
+  args.has_xnexecit = riscv_subset_supports (&riscv_rps_dis, "xnexecit") ||
+		      riscv_subset_supports (&riscv_rps_dis, "xandesnewcodense");
+  /* } Andes */
+
+  /* { Andes */
+  if (info->section && strstr (info->section->name, EXECIT_SECTION) != NULL)
+    pd->flags |= FLAG_EXECIT_TAB;
+  else
+    pd->flags &= ~FLAG_EXECIT_TAB;
+  /* } Andes */
 
   insnlen = riscv_insn_length (word);
 
@@ -827,12 +1166,39 @@ riscv_disassemble_insn (bfd_vma memaddr,
 	  xlen = ehdr->e_ident[EI_CLASS] == ELFCLASS64 ? 64 : 32;
 	}
 
+      if (pd->jvt_base > 0 && (pd->jvt_end > pd->jvt_base + 256 * (xlen / 8)))
+	pd->jvt_end = pd->jvt_base + 255 * (xlen / 8);
+
+      /* Dump jump table entries.  */
+      if (riscv_subset_supports (&riscv_rps_dis, "zcmt")
+	  && pd->jvt_base != 0
+	  && pd->jvt_base != (bfd_vma)-1
+	  && memaddr >= pd->jvt_start
+	  && memaddr < pd->jvt_end
+	  && print_jvt_entry_value (info, memaddr))
+	{
+	  info->bytes_per_chunk = xlen / 8;
+	  return xlen / 8;
+	}
+
       /* If arch has the Zfinx extension, replace FPR with GPR.  */
       if (riscv_subset_supports (&riscv_rps_dis, "zfinx"))
 	riscv_fpr_names = riscv_gpr_names;
       else
 	riscv_fpr_names = riscv_gpr_names == riscv_gpr_names_abi ?
 			  riscv_fpr_names_abi : riscv_fpr_names_numeric;
+
+      /* { Andes */
+      /* Prefer RVC when supported.  */
+      const riscv_opcode_t *op2 = NULL;
+      if (!no_prefer)
+	{
+	  /* RVC has non-canonical aliases within riscv_opcodes[].  */
+	  if (insnlen == 2 && args.has_c)
+	    andes_find_op_name_match ("c.unimp", 0, riscv_hash, &op2);
+	}
+      op = op2 ? op2 : op;
+      /* } Andes */
 
       for (; op->name; op++)
 	{
@@ -850,6 +1216,17 @@ riscv_disassemble_insn (bfd_vma memaddr,
 	    continue;
 	  /* Is this instruction supported by the current architecture?  */
 	  if (!riscv_multi_subset_supports (&riscv_rps_dis, op->insn_class))
+	    continue;
+
+	  if ((args.has_zcb || args.has_xnexecit)
+	      && ((0 == strcmp (op->name, "nds.exec.it"))
+		  || (0 == strcmp (op->name, "exec.it"))))
+	    continue;
+
+	  /* prefer c.?ext.? */
+	  if (!no_prefer
+	      && insnlen == 2
+	      && 0 == strncmp (op->name+1, "ext.", 4))
 	    continue;
 
 	  /* It's a match.  */
@@ -897,6 +1274,16 @@ riscv_disassemble_insn (bfd_vma memaddr,
 	}
     }
 
+  /* { Andes ACE */
+  /* It may be an ACE insn but the ACE ECA file is not loaded.  */
+  if (debugging && !ace_eca_load_success && (word & 0x7f) == 0x7b)
+    {
+      info->insn_type = dis_noninsn;
+      (*info->fprintf_func) (info->stream, "ACE insn (0x%llx)",
+			     (unsigned long long)word);
+    }
+  /* } Andes ACE */
+
   /* We did not find a match, so just print the instruction bits in
      the shape of an assembler .insn directive.  */
   info->insn_type = dis_noninsn;
@@ -942,26 +1329,6 @@ riscv_update_map_state (int n,
     *state = MAP_INSN;
   else if (strcmp (name, "$d") == 0)
     *state = MAP_DATA;
-  else if (strncmp (name, "$xrv", 4) == 0)
-    {
-      *state = MAP_INSN;
-      riscv_release_subset_list (&riscv_subsets);
-
-      /* ISA mapping string may be numbered, suffixed with '.n'. Do not
-	 consider this as part of the ISA string.  */
-      char *suffix = strchr (name, '.');
-      if (suffix)
-	{
-	  int suffix_index = (int)(suffix - name);
-	  char *name_substr = xmalloc (suffix_index + 1);
-	  strncpy (name_substr, name, suffix_index);
-	  name_substr[suffix_index] = '\0';
-	  riscv_parse_subset (&riscv_rps_dis, name_substr + 2);
-	  free (name_substr);
-	}
-      else
-	riscv_parse_subset (&riscv_rps_dis, name + 2);
-    }
 }
 
 /* Return true if we find the suitable mapping symbol.
@@ -1209,26 +1576,71 @@ riscv_disassemble_data (bfd_vma memaddr ATTRIBUTE_UNUSED,
 static bool
 riscv_init_disasm_info (struct disassemble_info *info)
 {
+  const bfd_vma minus = (bfd_vma)-1;
   int i;
+  asymbol *sym;
+  bfd_vma sym_val;
 
   struct riscv_private_data *pd =
 	xcalloc (1, sizeof (struct riscv_private_data));
-  pd->gp = 0;
-  pd->print_addr = 0;
+  pd->gp = minus;
+  pd->print_addr = minus;
+  pd->jvt_base = minus;
+  pd->jvt_end = minus;
   for (i = 0; i < (int) ARRAY_SIZE (pd->hi_addr); i++)
-    pd->hi_addr[i] = -1;
+    pd->hi_addr[i] = minus;
   pd->to_print_addr = false;
   pd->has_gp = false;
 
   for (i = 0; i < info->symtab_size; i++)
     {
-      asymbol *sym = info->symtab[i];
+      sym = info->symtab[i];
       if (strcmp (bfd_asymbol_name (sym), RISCV_GP_SYMBOL) == 0)
 	{
 	  pd->gp = bfd_asymbol_value (sym);
 	  pd->has_gp = true;
 	}
+      /* Read the address of table jump entries.  */
+      else if (strcmp (bfd_asymbol_name (sym),
+		       RISCV_TABLE_JUMP_BASE_SYMBOL) == 0)
+	pd->jvt_base = bfd_asymbol_value (sym);
     }
+
+  /* Find jump table section.  */
+  if (info->section && info->section->owner && info->section->owner->sections)
+    {
+      asection *p = info->section->owner->sections;
+      const char *LD_JVT_SEC_NAME = TABLE_JUMP_SEC_NAME;
+      const char *LLD_JVT_SEC_NAME = ".riscv.jvt";
+      while (p)
+	{
+	  if (0 == strcmp (p->name, LD_JVT_SEC_NAME)
+	      || 0 == strcmp (p->name, LLD_JVT_SEC_NAME))
+	    {
+	      pd->jvt_start = p->vma;
+	      pd->jvt_end = p->vma + p->size;
+	      break;
+	    }
+	  p = p->next;
+	}
+    }
+
+  /* Calculate the closest symbol from jvt base to determine the size of
+     table jump entry section.  */
+  if (pd->jvt_base != 0 && pd->jvt_end == minus)
+    {
+      for (i = 0; i < info->symtab_size; i++)
+	{
+	  sym_val = bfd_asymbol_value (info->symtab[i]);
+	  if (sym_val > pd->jvt_base && sym_val < pd->jvt_end)
+	    pd->jvt_end = sym_val;
+	}
+    }
+
+  if (pd->jvt_base == minus || pd->jvt_end == minus)
+    pd->jvt_start = pd->jvt_end = 0;
+  if (pd->jvt_base != minus && pd->jvt_start < pd->jvt_base)
+    pd->jvt_start = pd->jvt_base;
 
   info->private_data = pd;
   return true;
@@ -1369,7 +1781,12 @@ static struct
     RISCV_OPTION_ARG_NONE },
   { "priv-spec=",
     N_("Print the CSR according to the chosen privilege spec."),
-    RISCV_OPTION_ARG_PRIV_SPEC }
+    RISCV_OPTION_ARG_PRIV_SPEC },
+  /* { Andes */
+  { "_no-prefer",
+    N_("Disassemble no prefer instructions."),
+    RISCV_OPTION_ARG_NONE }
+  /* } Andes */
 };
 
 /* Build the structure representing valid RISCV disassembler options.
@@ -1496,3 +1913,543 @@ void disassemble_free_riscv (struct disassemble_info *info ATTRIBUTE_UNUSED)
 {
   riscv_release_subset_list (&riscv_subsets);
 }
+
+/* { Andes */
+static void
+andes_execit_info (bfd_vma pc ATTRIBUTE_UNUSED, disassemble_info *info,
+		   uint32_t execit_index)
+{
+  uint32_t insn;
+  static asection *section = NULL;
+  static bfd_vma bias = 0;
+  bfd_byte buffer[4];
+  int insnlen;
+  private_data_t *pd = info->private_data;
+  bfd_vma keep;
+
+  /* If no section info can be related to this EXEC.IT insn, this may be just
+     a uninitiated memory content, so not to decode it.  */
+  if (info->section == NULL)
+    return;
+
+  /* Lookup section in which itb is located.  */
+  if (!section)
+    {
+      section = bfd_get_section_by_name (info->section->owner, EXECIT_SECTION);
+      /* If not found, try symbol "_ITB_BASE_".  */
+      if (section == NULL)
+	{
+	  /* TODO: find the existed API to do this.  */
+	  int i;
+	  for (i = 0; i < info->symtab_size; i++)
+	    {
+	      if (0 == strcmp ("_ITB_BASE_", info->symtab[i]->name))
+		{
+		  section = info->symtab[i]->section;
+		  bias = info->symtab[i]->value;
+		  break;
+		}
+	    }
+	}
+
+      /* Lookup it only once, in case .exec.itable doesn't exist at all.  */
+      if (section == NULL)
+	section = (void *)-1;
+    }
+
+  if (section == (void *)-1)
+    return;
+
+  if (!section->owner)
+    return;
+
+  bfd_get_section_contents (section->owner, section, buffer,
+			    execit_index * 4 + bias, 4);
+  insn = bfd_get_32 (section->owner, buffer);
+  insnlen = riscv_insn_length (insn);
+
+  keep = pd->flags;
+  pd->flags |= FLAG_EXECIT;
+  /* 16-bit instructions in .exec.itable.  */
+  if (insnlen == 2)
+    riscv_disassemble_insn (pc, (insn & 0x0000FFFF), (const bfd_byte *)&insn,
+			    info);
+  /* 32-bit instructions in .exec.itable.  */
+  else
+    riscv_disassemble_insn (pc, insn, (const bfd_byte *)&insn, info);
+  pd->flags = keep;
+
+  /* bytes_per_chunk is referred to dump insn binary after v2.32
+     fix it here for EXEC.IT.  */
+  info->bytes_per_chunk = 2;
+  return;
+}
+
+static void
+andes_find_op_name_match (const char *mne, insn_t match,
+			  const riscv_opcode_t **hash,
+			  const riscv_opcode_t **pop)
+{
+  const riscv_opcode_t *op;
+
+  op = hash[OP_HASH_IDX (match)];
+  for (; op->name; op++)
+    {
+      if ((op->xlen_requirement != 0) && (op->xlen_requirement != xlen))
+	continue;
+      if (op->match != match)
+	continue;
+      if (strcmp (op->name, mne) != 0)
+	continue;
+
+      *pop = op;
+      break;
+    }
+
+  return;
+}
+/* } Andes */
+
+/* { Andes ACE */
+static unsigned int
+andes_ace_get_discrete_bit_value (unsigned int bit_value,
+				  char *op_name_discrete, const char *op)
+{
+  bool found_or_token = true;
+  unsigned val, ret = 0;
+  char *psep, *pval = op_name_discrete + strlen (op);
+  unsigned msb = 0, width = 0, width_acc = 0;
+
+  while (found_or_token)
+    {
+      /* Extract msb from string.  */
+      psep = strchr (pval, '_');
+      *psep = '\0';
+      msb = strtoul (pval, (char **)NULL, 10);
+      /* Extract width from string.  */
+      pval = psep + 1;
+      psep = strchr (pval, '|');
+      if (psep)
+	*psep = '\0';
+      else
+	found_or_token = false;
+      width = strtoul (pval, (char **)NULL, 10);
+
+      /* Perform mask to truncate oversize value.  */
+      val = bit_value << (32 - msb - 1);
+      val >>= 32 - width;
+      val <<= width_acc;
+      ret |= val;
+      width_acc += width;
+
+      /* Prepare condition for next iteration.  */
+      pval = psep + 1;
+    }
+  return ret;
+}
+
+/* Print out ACE instruction assembly code.  */
+
+static void
+andes_print_ace_args (const char **args, insn_t l, disassemble_info *info)
+{
+  fprintf_ftype print = info->fprintf_func;
+
+  /* Extract field attribute name from opcode description (ace_ops) and
+     store the extracted result to var of op_name for finding the
+     field attribute information from ace_field_hash.  */
+  bool found_op_str_end = false;
+  char *pch = strchr (*args, ',');
+  if (pch == NULL)
+    {
+      pch = strchr (*args, '\0');
+      found_op_str_end = true;
+    }
+  if (pch == NULL)
+    return;
+
+  unsigned int op_name_size = pch - (*args + 1);
+  char *op_name = xmalloc (op_name_size + 1);
+  memcpy (op_name, *args + 1, op_name_size);
+  /* Cat null character to the end of op_name to avoid gash.  */
+  memcpy (op_name + op_name_size, "\0", 1);
+
+  /* With rGPR encoding format, operand bit-field may be discrete.
+     There is an "|" token in discrete format.  */
+  bool is_discrete = false;
+  char *por = strchr (op_name, '|');
+  char *op_name_discrete;
+  if (por != NULL)
+    {
+      is_discrete = true;
+      op_name_discrete = xmalloc (op_name_size + 1);
+      strcpy (op_name_discrete, op_name);
+      *por = '\0';
+    }
+
+  /* Find the field attribute from ace_field_hash and encode instruction.  */
+  ace_op_t *ace_op = NULL;
+  unsigned int i = 0;
+  while (ace_ops[i].name)
+    {
+      if (strcmp (ace_ops[i].name, op_name) == 0)
+	{
+	  ace_op = &ace_ops[i];
+	  break;
+	}
+      i++;
+    }
+
+  if (ace_op != NULL)
+    {
+      /* Extract the value from defined location.  */
+      unsigned int bit_value = l;
+      bit_value <<= 32 - (ace_op->bitpos + 1);
+      bit_value >>= 32 - ace_op->bitsize;
+
+      switch (ace_op->hw_res)
+	{
+	case HW_GPR:
+	  print (info->stream, "%s", riscv_gpr_names[bit_value]);
+	  break;
+
+	case HW_FPR:
+	  print (info->stream, "%s", riscv_fpr_names[bit_value]);
+	  break;
+
+	case HW_VR:
+	  print (info->stream, "%s", riscv_vecr_names_numeric[bit_value]);
+	  break;
+
+	case HW_UINT:
+	  if (is_discrete)
+	    bit_value = andes_ace_get_discrete_bit_value (l, op_name_discrete,
+							  "imm");
+	  print (info->stream, "%d", bit_value);
+	  break;
+
+	case HW_ACR:
+	  if (is_discrete)
+	    bit_value = andes_ace_get_discrete_bit_value (l, op_name_discrete,
+							  ace_op->hw_name);
+	  print (info->stream, "%s_%d", ace_op->hw_name, bit_value);
+	  break;
+	}
+    }
+  else
+    {
+      fprintf (stderr, _("ace_op is NULL\n"));
+      return;
+    }
+
+  /* Update the address of pointer of the field attribute (*args).  */
+  if (found_op_str_end == true)
+    *args = pch - 1;
+  else
+    {
+      *args = pch;
+      print (info->stream, ",");
+    }
+}
+
+static bool
+read_string (uint8_t **p, const char **s)
+{
+  if (**p == '0')
+    {
+      *s = NULL;
+      return true;
+    }
+
+  if (**p == '"')
+    {
+      (*p)++;
+      size_t len = 0;
+      char *buffer = xcalloc (1024, sizeof (char));
+
+      // read until next double quote or the end
+      while (**p != '"' && **p != '\0' && len < 1023)
+	{
+	  buffer[len++] = **p;
+	  (*p)++;
+	}
+
+      // if there is no next double quote
+      if (**p != '"')
+	{
+	  free (buffer);
+	  return false;
+	}
+
+      buffer[len] = '\0';
+      *s = buffer;
+      return true;
+    }
+
+  return false;
+}
+
+static bool
+read_int (uint8_t **p, int *n)
+{
+  int i;
+  if (sscanf ((char *)*p, "%d%n", n, &i) == 1)
+    {
+      *p += i - 1;
+      return true;
+    }
+  else
+    return false;
+}
+
+static bool
+read_hex (uint8_t **p, uint64_t *h)
+{
+  int i;
+  if (sscanf ((char *)*p, "\"0x%lx\"%n", h, &i) == 1)
+    {
+      *p += i - 1;
+      return true;
+    }
+  else
+    return false;
+}
+
+static int
+match_ace_opcode (const struct riscv_opcode *op, insn_t insn)
+{
+  return ((insn ^ op->match) & op->mask) == 0;
+}
+
+/* Load ACE instructions from ACE ECA file.  */
+
+char *
+andes_ace_load_hooks (const char *arg)
+{
+  FILE *file;
+  const char *name, *suffix = ".eca";
+  char *err = xcalloc (128, sizeof (char));
+  int bracket_level = 0, type_idx = 0, element_idx = 0, token_idx = 0,
+      ace_keys_size, ace_ops_size, ace_opcs_size, value;
+  size_t arg_len = strlen (arg), suffix_len = strlen (suffix);
+  uint8_t iv[16];
+  struct AES_ctx ctx;
+
+#ifdef COPILOT_GAS_KEY
+#define STRINGIFY(x) #x
+#define TO_STRING(x) STRINGIFY (x)
+  uint8_t hex[32] = TO_STRING (COPILOT_GAS_KEY), key[16];
+  for (size_t i = 0; i < 16; i++)
+    sscanf ((char *)&hex[i * 2], "%2hhx", &key[i]);
+#else
+  uint8_t key[16] = { 0 };
+#endif
+
+  if (suffix_len >= arg_len
+      || strcmp (arg + arg_len - suffix_len, suffix) != 0)
+    {
+      sprintf (err, "the file extension must be .eca");
+      return err;
+    }
+
+  file = fopen (arg, "rb");
+  if (!file)
+    {
+      sprintf (err, "can't open %s", arg);
+      return err;
+    }
+
+  fseek (file, 0, SEEK_END);
+  long file_size = ftell (file);
+  fseek (file, 0, SEEK_SET);
+
+  /* Parse ECA data.  */
+  /* Skip the first three lines.  */
+  for (int i = 0; i < 3; i++)
+    {
+      char ch;
+      while ((ch = fgetc (file)) != '\n' && ch != EOF)
+	;
+    }
+
+  /* Read IV.  */
+  fread (iv, 1, sizeof (iv), file);
+
+  /* Read ciphertext.  */
+  size_t data_size = file_size - ftell (file);
+  uint8_t *data = (uint8_t *)xcalloc (data_size + 1, sizeof (uint8_t));
+  fread (data, 1, data_size, file);
+
+  /* Decrypt the ciphertext to JSON data if the ciphertext is 16-bytes
+     aligned.  */
+  if (data_size % 16 != 0)
+    goto invalid_format;
+  AES_init_ctx_iv (&ctx, key, iv);
+  AES_CBC_decrypt_buffer (&ctx, data, data_size);
+
+  /* Remove PKCS#7 padding.  */
+  size_t padding = data[data_size - 1];
+  if (padding > 16 || padding > data_size)
+    goto invalid_format;
+  data[data_size - padding] = '\0';
+
+  /* Parse JSON data.  */
+  for (uint8_t *p = data; p != data + strlen ((char *)data); p++)
+    {
+      if (*p == ' ' || *p == ',' || *p == '\t' || *p == '\n')
+	continue;
+      else if (*p == '[')
+	bracket_level++;
+      else if (*p == ']')
+	{
+	  bracket_level--;
+	  if (bracket_level == 1)
+	    {
+	      type_idx++;
+	      element_idx = 0;
+	    }
+	  else if (bracket_level == 2)
+	    {
+	      if (type_idx != 1)
+		element_idx++;
+	      token_idx = 0;
+	    }
+	}
+      else if (bracket_level == 3 && (*p == '"' || isdigit (*p)))
+	{
+	  switch (type_idx)
+	    {
+	    case 0:
+	      switch (token_idx)
+		{
+		case 0:
+		  if (!read_int (&p, &ace_keys_size))
+		    goto invalid_format;
+		  ace_keys = (ace_keyword_t *)xcalloc (ace_keys_size + 1,
+						       sizeof (ace_keyword_t));
+		  break;
+		case 1:
+		  if (!read_int (&p, &ace_ops_size))
+		    goto invalid_format;
+		  ace_ops = (ace_op_t *)xcalloc (ace_ops_size + 1,
+						 sizeof (ace_op_t));
+		  break;
+		case 2:
+		  if (!read_int (&p, &ace_opcs_size))
+		    goto invalid_format;
+		  ace_opcs = (struct riscv_opcode *)xcalloc (
+		      ace_opcs_size + 1, sizeof (struct riscv_opcode));
+		  break;
+		default:
+		  goto invalid_format;
+		}
+	      break;
+	    case 1:
+	      switch (token_idx)
+		{
+		case 0:
+		  if (!read_string (&p, &name))
+		    goto invalid_format;
+		  break;
+		case 1:
+		  if (!read_int (&p, &value))
+		    goto invalid_format;
+		  for (int i = 0; i < value; i++)
+		    {
+		      ace_keys[element_idx].name
+			  = xcalloc (strlen (name) + 20, sizeof (char));
+		      sprintf ((char *)ace_keys[element_idx].name, "%s_%d",
+			       name, i);
+		      ace_keys[element_idx].value = i;
+		      ace_keys[element_idx].attr = 0;
+		      element_idx++;
+		    }
+		  free ((char *)name);
+		  break;
+		default:
+		  goto invalid_format;
+		}
+	      break;
+	    case 2:
+	      switch (token_idx)
+		{
+		case 0:
+		  if (!read_string (&p, &ace_ops[element_idx].name))
+		    goto invalid_format;
+		  break;
+		case 1:
+		  if (!read_int (&p, &ace_ops[element_idx].bitpos))
+		    goto invalid_format;
+		  break;
+		case 2:
+		  if (!read_int (&p, &ace_ops[element_idx].bitsize))
+		    goto invalid_format;
+		  break;
+		case 3:
+		  if (!read_int (&p, &ace_ops[element_idx].hw_res))
+		    goto invalid_format;
+		  break;
+		case 4:
+		  if (!read_string (&p, &ace_ops[element_idx].hw_name))
+		    goto invalid_format;
+		  ace_ops[element_idx].shift = 0;
+		  break;
+		default:
+		  goto invalid_format;
+		}
+	      break;
+	    case 3:
+	      switch (token_idx)
+		{
+		case 0:
+		  if (!read_string (&p, &ace_opcs[element_idx].name))
+		    goto invalid_format;
+		  break;
+		case 1:
+		  if (!read_string (&p, &ace_opcs[element_idx].args))
+		    goto invalid_format;
+		  break;
+		case 2:
+		  if (!read_hex (&p, &ace_opcs[element_idx].match))
+		    goto invalid_format;
+		  break;
+		case 3:
+		  if (!read_hex (&p, &ace_opcs[element_idx].mask))
+		    goto invalid_format;
+		  ace_opcs[element_idx].xlen_requirement = 0;
+		  ace_opcs[element_idx].insn_class = INSN_CLASS_ACE;
+		  ace_opcs[element_idx].match_func = match_ace_opcode;
+		  ace_opcs[element_idx].pinfo = 0;
+		  break;
+		default:
+		  goto invalid_format;
+		}
+	      break;
+	    default:
+	      goto invalid_format;
+	    }
+	  token_idx++;
+	}
+      else
+	goto invalid_format;
+    }
+
+  if (bracket_level != 0 || type_idx != 4)
+    {
+    invalid_format:
+      sprintf (err, "%s: format error", arg);
+    }
+
+  fclose (file);
+  free (data);
+
+  if (strlen (err) != 0)
+    return err;
+  else
+    {
+      ace_eca_load_success = true;
+      free (err);
+      return NULL;
+    }
+}
+/* } Andes ACE */

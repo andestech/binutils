@@ -37,11 +37,12 @@ static inline unsigned int riscv_insn_length (insn_t insn)
     return 6;
   if ((insn & 0x7f) == 0x3f) /* 64-bit instructions.  */
     return 8;
-  /* 80- ... 176-bit instructions.  */
-  if ((insn & 0x7f) == 0x7f && (insn & 0x7000) != 0x7000)
-    return 10 + ((insn >> 11) & 0xe);
+  /* { Andes */
+  if ((insn & 0x7f) == 0x7f) /* 32-bit RVP v0.5.  */
+    return 4;
+  /* } Andes */
   /* Maximum value returned by this function.  */
-#define RISCV_MAX_INSN_LEN 22
+#define RISCV_MAX_INSN_LEN 8
   /* Longer instructions not supported at the moment.  */
   return 2;
 }
@@ -112,11 +113,56 @@ static inline unsigned int riscv_insn_length (insn_t insn)
   (RV_X(x, 6, 1) | (RV_X(x, 5, 1) << 1))
 #define EXTRACT_ZCB_HALFWORD_UIMM(x) \
   (RV_X(x, 5, 1) << 1)
-/* Vendor-specific (CORE-V) extract macros.  */
-#define EXTRACT_CV_IS2_UIMM5(x) \
+#define EXTRACT_ZCMP_SPIMM(x) \
+  (RV_X(x, 2, 2) << 4)
+#define EXTRACT_ZCMP_TABLE_JUMP_INDEX(x) \
+  (RV_X(x, 2, 8))
+/* { Andes */
+#define EXTRACT_UJTYPE_IMM_EXECIT_TAB(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 31, 1) << 20))
+#define EXTRACT_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 12, 1) << 10) | (RV_X(x, 8, 1) << 11))
+#define EXTRACT_RVC_NEXECIT_IMM(x) \
+  ((RV_X(x, 4, 1) << 2) | (RV_X(x, 10, 2) << 3) | (RV_X(x, 2, 1) << 5) | (RV_X(x, 5, 2) << 6) | (RV_X(x, 9, 1) << 8) | (RV_X(x, 3, 1) << 9) | (RV_X(x, 7, 1) << 10) | (RV_X(x, 8, 1) << 11))
+#define EXTRACT_ITYPE_IMM6H(x) \
+  (RV_X(x, 26, 6))
+#define EXTRACT_ITYPE_IMM6L(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_STYPE_IMM7(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5 | RV_X(x, 30, 1) << 6)
+#define EXTRACT_STYPE_IMM10(x) \
+  (RV_X(x, 8, 4) << 1 | (RV_X(x, 25, 5) << 5) | (RV_IMM_SIGN(x) << 10))
+#define EXTRACT_TYPE_CIMM6(x) \
+  ((RV_X(x, 20, 5)) | (RV_X(x, 7, 1)) << 5)
+#define EXTRACT_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 21, 10) << 1) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 22, 9) << 2) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 23, 8) << 3) | (RV_X(x, 20, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 21, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+#define EXTRACT_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 14, 1)) | (RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_IMM_SIGN(x) << 17))
+#define EXTRACT_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 9, 3) << 2) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 1) << 17) | (RV_IMM_SIGN(x) << 18))
+#define EXTRACT_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 10, 2) << 3) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_X(x, 17, 3) << 12) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 8, 2) << 17) | (RV_IMM_SIGN(x) << 19))
+#define EXTRACT_PTYPE_IMM3U(x) \
+  (RV_X(x, 20, 3))
+#define EXTRACT_PTYPE_IMM4U(x) \
+  (RV_X(x, 20, 4))
+#define EXTRACT_PTYPE_IMM5U(x) \
   (RV_X(x, 20, 5))
-#define EXTRACT_CV_IS3_UIMM5(x) \
-  (RV_X(x, 25, 5))
+#define EXTRACT_PTYPE_IMM6U(x) \
+  (RV_X(x, 20, 6))
+#define EXTRACT_PTYPE_IMM15S(x) \
+  ((-RV_X(x, 24, 1) << 15) | (RV_X(x, 7, 5) << 0) | RV_X(x, 15, 9) << 5)
+#define EXTRACT_SBTYPE_IMM(x) \
+  ((RV_X(x, 8, 4) << 1) | (RV_X(x, 25, 6) << 5) | (RV_X(x, 7, 1) << 11) | (RV_IMM_SIGN(x) << 12))
+/* } Andes */
 
 #define ENCODE_ITYPE_IMM(x) \
   (RV_X(x, 0, 12) << 20)
@@ -168,11 +214,54 @@ static inline unsigned int riscv_insn_length (insn_t insn)
   ((RV_X(x, 0, 1) << 6) | (RV_X(x, 1, 1) << 5))
 #define ENCODE_ZCB_HALFWORD_UIMM(x) \
   (RV_X(x, 1, 1) << 5)
-/* Vendor-specific (CORE-V) encode macros.  */
-#define ENCODE_CV_IS2_UIMM5(x) \
+#define ENCODE_ZCMP_SPIMM(x) \
+  (RV_X(x, 4, 2) << 2)
+#define ENCODE_ZCMP_TABLE_JUMP_INDEX(x) \
+  (RV_X(x, 0, 8) << 2)
+/* { Andes */
+#define ENCODE_RVC_EXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 12) | (RV_X(x, 11, 1) << 8))
+#define ENCODE_RVC_NEXECIT_IMM(x) \
+  ((RV_X(x, 2, 1) << 4) | (RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 1) << 2) | (RV_X(x, 6, 2) << 5) | (RV_X(x, 8, 1) << 9) | (RV_X(x, 9, 1) << 3) | (RV_X(x, 10, 1) << 7) | (RV_X(x, 11, 1) << 8))
+#define ENCODE_STYPE_IMM7(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7) | (RV_X(x, 6, 1) << 30))
+#define ENCODE_STYPE_IMM10(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 5) << 25) | (RV_X(x, 10, 1) << 31))
+#define ENCODE_SBTYPE_IMM6H(x) \
+  (RV_X(x, 0, 6) << 26)
+#define ENCODE_SBTYPE_IMM6L(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_TYPE_CIMM6(x) \
+  ((RV_X(x, 0, 5) << 20) | (RV_X(x, 5, 1) << 7))
+#define ENCODE_GPTYPE_SB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SH_IMM(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_SW_IMM(x) \
+  ((RV_X(x, 2, 3) << 9) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 8) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_SD_IMM(x) \
+  ((RV_X(x, 3, 2) << 10) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 8) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_GPTYPE_LB_IMM(x) \
+  ((RV_X(x, 0, 1) << 14) | (RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LH_IMM(x) \
+  ((RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 31))
+#define ENCODE_GPTYPE_LW_IMM(x) \
+  ((RV_X(x, 2, 9) << 22) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 1) << 21) | (RV_X(x, 18, 1) << 31))
+#define ENCODE_GPTYPE_LD_IMM(x) \
+  ((RV_X(x, 3, 8) << 23) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 3) << 17) | (RV_X(x, 15, 2) << 15) | (RV_X(x, 17, 2) << 21) | (RV_X(x, 19, 1) << 31))
+#define ENCODE_PTYPE_IMM3U(x) \
+  (RV_X(x, 0, 3) << 20)
+#define ENCODE_PTYPE_IMM4U(x) \
+  (RV_X(x, 0, 4) << 20)
+#define ENCODE_PTYPE_IMM5U(x) \
   (RV_X(x, 0, 5) << 20)
-#define ENCODE_CV_IS3_UIMM5(x) \
-  (RV_X(x, 0, 5) << 25)
+#define ENCODE_PTYPE_IMM6U(x) \
+  (RV_X(x, 0, 6) << 20)
+#define ENCODE_PTYPE_IMM15S(x) \
+  ((RV_X(x, 0, 5) << 7) | RV_X(x, 5, 10) << 15)
+#define ENCODE_SBTYPE_IMM(x) \
+  ((RV_X(x, 1, 4) << 8) | (RV_X(x, 5, 6) << 25) | (RV_X(x, 11, 1) << 7) | (RV_X(x, 12, 1) << 31))
+/* } Andes */
 
 #define VALID_ITYPE_IMM(x) (EXTRACT_ITYPE_IMM(ENCODE_ITYPE_IMM(x)) == (x))
 #define VALID_STYPE_IMM(x) (EXTRACT_STYPE_IMM(ENCODE_STYPE_IMM(x)) == (x))
@@ -200,6 +289,27 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define VALID_RVV_VC_IMM(x) (EXTRACT_RVV_VC_IMM(ENCODE_RVV_VC_IMM(x)) == (x))
 #define VALID_ZCB_BYTE_UIMM(x) (EXTRACT_ZCB_BYTE_UIMM(ENCODE_ZCB_BYTE_UIMM(x)) == (x))
 #define VALID_ZCB_HALFWORD_UIMM(x) (EXTRACT_ZCB_HALFWORD_UIMM(ENCODE_ZCB_HALFWORD_UIMM(x)) == (x))
+#define VALID_ZCMP_SPIMM(x) (EXTRACT_ZCMP_SPIMM(ENCODE_ZCMP_SPIMM(x)) == (x))
+/* { Andes */
+/* Andes Specific.  */
+#define VALID_STYPE_IMM10(x) (EXTRACT_STYPE_IMM10(ENCODE_STYPE_IMM10(x)) == (x))
+#define VALID_GPTYPE_LB_IMM(x) (EXTRACT_GPTYPE_LB_IMM(ENCODE_GPTYPE_LB_IMM(x)) == (x))
+#define VALID_GPTYPE_LH_IMM(x) (EXTRACT_GPTYPE_LH_IMM(ENCODE_GPTYPE_LH_IMM(x)) == (x))
+#define VALID_GPTYPE_LW_IMM(x) (EXTRACT_GPTYPE_LW_IMM(ENCODE_GPTYPE_LW_IMM(x)) == (x))
+#define VALID_GPTYPE_LD_IMM(x) (EXTRACT_GPTYPE_LD_IMM(ENCODE_GPTYPE_LD_IMM(x)) == (x))
+#define VALID_GPTYPE_SB_IMM(x) (EXTRACT_GPTYPE_SB_IMM(ENCODE_GPTYPE_SB_IMM(x)) == (x))
+#define VALID_GPTYPE_SH_IMM(x) (EXTRACT_GPTYPE_SH_IMM(ENCODE_GPTYPE_SH_IMM(x)) == (x))
+#define VALID_GPTYPE_SW_IMM(x) (EXTRACT_GPTYPE_SW_IMM(ENCODE_GPTYPE_SW_IMM(x)) == (x))
+#define VALID_GPTYPE_SD_IMM(x) (EXTRACT_GPTYPE_SD_IMM(ENCODE_GPTYPE_SD_IMM(x)) == (x))
+#define VALID_RVC_EXECIT_IMM(x) (EXTRACT_RVC_EXECIT_IMM(ENCODE_RVC_EXECIT_IMM(x)) == (x))
+#define VALID_RVC_NEXECIT_IMM(x) (EXTRACT_RVC_NEXECIT_IMM(ENCODE_RVC_NEXECIT_IMM(x)) == (x))
+#define VALID_PTYPE_IMM3U(x) (EXTRACT_PTYPE_IMM3U(ENCODE_PTYPE_IMM3U(x)) == (x))
+#define VALID_PTYPE_IMM4U(x) (EXTRACT_PTYPE_IMM4U(ENCODE_PTYPE_IMM4U(x)) == (x))
+#define VALID_PTYPE_IMM5U(x) (EXTRACT_PTYPE_IMM5U(ENCODE_PTYPE_IMM5U(x)) == (x))
+#define VALID_PTYPE_IMM6U(x) (EXTRACT_PTYPE_IMM6U(ENCODE_PTYPE_IMM6U(x)) == (x))
+#define VALID_PTYPE_IMM15S(x) (EXTRACT_PTYPE_IMM15S(ENCODE_PTYPE_IMM15S(x)) == (x))
+#define VALID_SBTYPE_IMM(x) (EXTRACT_SBTYPE_IMM(ENCODE_SBTYPE_IMM(x)) == (x))
+/* } Andes */
 
 #define RISCV_RTYPE(insn, rd, rs1, rs2) \
   ((MATCH_ ## insn) | ((rd) << OP_SH_RD) | ((rs1) << OP_SH_RS1) | ((rs2) << OP_SH_RS2))
@@ -238,6 +348,24 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define RISCV_BRANCH_ALIGN (1 << RISCV_BRANCH_ALIGN_BITS)
 #define RISCV_BRANCH_REACH (RISCV_IMM_REACH * RISCV_BRANCH_ALIGN)
 
+/* { Andes */
+#define RISCV_IMM7_BITS 7
+#define RISCV_IMM7_REACH (1LL << RISCV_IMM7_BITS)
+#define RISCV_IMM10_BITS 10
+#define RISCV_IMM10_REACH (1LL << RISCV_IMM10_BITS)
+#define RISCV_10_PCREL_REACH (RISCV_IMM10_REACH * RISCV_BRANCH_ALIGN)
+#define RISCV_IMM18_BITS 18
+#define RISCV_IMM18_REACH (1LL << RISCV_IMM18_BITS)
+#define RISCV_IMM19_BITS 19
+#define RISCV_IMM19_REACH (1LL << RISCV_IMM19_BITS)
+#define RISCV_IMM20_BITS 20
+#define RISCV_IMM20_REACH (1LL << RISCV_IMM20_BITS)
+
+/* exec.it */
+#define ENCODE_UJTYPE_IMM(x) \
+  ((RV_X(x, 1, 10) << 21) | (RV_X(x, 11, 1) << 20) | (RV_X(x, 12, 8) << 12) | (RV_X(x, 20, 1) << 31))
+/* } Andes */
+
 /* RV fields.  */
 
 #define OP_MASK_OP		0x7f
@@ -260,10 +388,19 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_PRED		24
 #define OP_MASK_SUCC		0xf
 #define OP_SH_SUCC		20
+#define OP_MASK_FENCE_TIME	0xf
+#define OP_SH_FENCE_TIME	20
 #define OP_MASK_AQ		0x1
 #define OP_SH_AQ		26
 #define OP_MASK_RL		0x1
 #define OP_SH_RL		25
+
+#define OP_MASK_RLIST		0xf
+#define OP_SH_RLIST		4
+#define OP_MASK_SREG1		0x7
+#define OP_SH_SREG1		7
+#define OP_MASK_SREG2		0x7
+#define OP_SH_SREG2		2
 
 #define OP_MASK_CSR		0xfffU
 #define OP_SH_CSR		20
@@ -303,6 +440,15 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_RNUM      20
 #define OP_MASK_RNUM    0xf
 
+/* { Andes */
+/* RVP fields.  */
+
+#define OP_MASK_SV		0x3
+#define OP_SH_SV		25
+#define OP_MASK_RC		0x1f
+#define OP_SH_RC		25
+/* } Andes */
+
 /* RVV fields.  */
 
 #define OP_MASK_VD		0x1f
@@ -325,26 +471,13 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_VTA		6
 #define OP_MASK_VMA		0x1
 #define OP_SH_VMA		7
+#define OP_MASK_ALT		0x1
+#define OP_SH_ALT		8
 #define OP_MASK_VWD		0x1
 #define OP_SH_VWD		26
 
-#define OP_MASK_XTHEADVLMUL	0x3
-#define OP_SH_XTHEADVLMUL	0
-#define OP_MASK_XTHEADVSEW	0x7
-#define OP_SH_XTHEADVSEW	2
-#define OP_MASK_XTHEADVEDIV	0x3
-#define OP_SH_XTHEADVEDIV	5
-#define OP_MASK_XTHEADVTYPE_RES	0xf
-#define OP_SH_XTHEADVTYPE_RES	7
-
 #define NVECR 32
 #define NVECM 1
-
-/* SiFive fields.  */
-#define OP_MASK_XSO2            0x3
-#define OP_SH_XSO2              26
-#define OP_MASK_XSO1            0x1
-#define OP_SH_XSO1              26
 
 /* ABI names for selected x-registers.  */
 
@@ -355,6 +488,14 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define X_T0 5
 #define X_T1 6
 #define X_T2 7
+#define X_S0 8
+#define X_S1 9
+#define X_A0 10
+#define X_A1 11
+#define X_S2 18
+#define X_S7 23
+#define X_S10 26
+#define X_S11 27
 #define X_T3 28
 
 #define NGPR 32
@@ -400,6 +541,9 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 /* The maximal number of subset can be required.  */
 #define MAX_SUBSET_NUM 4
 
+#define RISCV_SREG_0_7(REGNO) \
+  ((REGNO == X_S0 || REGNO == X_S1) || (REGNO >= X_S2 && REGNO <= X_S7))
+
 /* All RISC-V instructions belong to at least one of these classes.  */
 enum riscv_insn_class
 {
@@ -407,20 +551,29 @@ enum riscv_insn_class
 
   INSN_CLASS_I,
   INSN_CLASS_C,
-  INSN_CLASS_A,
   INSN_CLASS_M,
   INSN_CLASS_F,
   INSN_CLASS_D,
   INSN_CLASS_Q,
   INSN_CLASS_F_AND_C,
   INSN_CLASS_D_AND_C,
+  INSN_CLASS_ZICFILP,
+  INSN_CLASS_ZICFISS,
   INSN_CLASS_ZICOND,
   INSN_CLASS_ZICSR,
   INSN_CLASS_ZIFENCEI,
+  INSN_CLASS_ZIFENCETIME,
   INSN_CLASS_ZIHINTNTL,
   INSN_CLASS_ZIHINTNTL_AND_C,
   INSN_CLASS_ZIHINTPAUSE,
+  INSN_CLASS_ZIMOP,
+  INSN_CLASS_ZILSD,
   INSN_CLASS_ZMMUL,
+  INSN_CLASS_ZAAMO,
+  INSN_CLASS_ZABHA,
+  INSN_CLASS_ZABHA_AND_ZACAS,
+  INSN_CLASS_ZACAS,
+  INSN_CLASS_ZALRSC,
   INSN_CLASS_ZAWRS,
   INSN_CLASS_F_INX,
   INSN_CLASS_D_INX,
@@ -430,6 +583,7 @@ enum riscv_insn_class
   INSN_CLASS_ZFHMIN_INX,
   INSN_CLASS_ZFHMIN_AND_D_INX,
   INSN_CLASS_ZFHMIN_AND_Q_INX,
+  INSN_CLASS_ZFBFMIN,
   INSN_CLASS_ZFA,
   INSN_CLASS_D_AND_ZFA,
   INSN_CLASS_Q_AND_ZFA,
@@ -454,6 +608,10 @@ enum riscv_insn_class
   INSN_CLASS_ZVEF,
   INSN_CLASS_ZVBB,
   INSN_CLASS_ZVBC,
+  INSN_CLASS_ZVFBFA,
+  INSN_CLASS_ZVFBFMIN,
+  INSN_CLASS_ZVFBFWMA,
+  INSN_CLASS_ZVFOFP8MIN,
   INSN_CLASS_ZVKB,
   INSN_CLASS_ZVKG,
   INSN_CLASS_ZVKNED,
@@ -464,29 +622,32 @@ enum riscv_insn_class
   INSN_CLASS_ZCB_AND_ZBA,
   INSN_CLASS_ZCB_AND_ZBB,
   INSN_CLASS_ZCB_AND_ZMMUL,
+  INSN_CLASS_SMRNMI,
   INSN_CLASS_SVINVAL,
   INSN_CLASS_ZICBOM,
   INSN_CLASS_ZICBOP,
   INSN_CLASS_ZICBOZ,
+  INSN_CLASS_ZCMP,
+  INSN_CLASS_ZCMT,
+  INSN_CLASS_ZCMOP,
+  INSN_CLASS_ZCLSD,
   INSN_CLASS_H,
-  INSN_CLASS_XCVMAC,
-  INSN_CLASS_XCVALU,
-  INSN_CLASS_XTHEADBA,
-  INSN_CLASS_XTHEADBB,
-  INSN_CLASS_XTHEADBS,
-  INSN_CLASS_XTHEADCMO,
-  INSN_CLASS_XTHEADCONDMOV,
-  INSN_CLASS_XTHEADFMEMIDX,
-  INSN_CLASS_XTHEADFMV,
-  INSN_CLASS_XTHEADINT,
-  INSN_CLASS_XTHEADMAC,
-  INSN_CLASS_XTHEADMEMIDX,
-  INSN_CLASS_XTHEADMEMPAIR,
-  INSN_CLASS_XTHEADSYNC,
-  INSN_CLASS_XTHEADVECTOR,
-  INSN_CLASS_XTHEADZVAMO,
-  INSN_CLASS_XVENTANACONDOPS,
-  INSN_CLASS_XSFVCP,
+  /* { Andes */
+  INSN_CLASS_ACE,
+  INSN_CLASS_P,
+  INSN_CLASS_XANDESPERF,
+  INSN_CLASS_XANDESCODENSE,
+  INSN_CLASS_XANDESNEWCODENSE,
+  INSN_CLASS_XANDESBFHCVT,
+  INSN_CLASS_XANDESVBFHCVT,
+  INSN_CLASS_XANDESVSINTLOAD,
+  INSN_CLASS_XANDESVPACKFPH,
+  INSN_CLASS_XANDESVDOT,
+  INSN_CLASS_XANDESVSINTH,
+  INSN_CLASS_XANDESVQMAC,
+  INSN_CLASS_XANDESVMM,
+  INSN_CLASS_XEFHW,
+  /* } Andes */
 };
 
 /* This structure holds information for a particular instruction.  */
@@ -526,6 +687,8 @@ struct riscv_opcode
      information.  */
   unsigned long pinfo;
 };
+
+typedef struct riscv_opcode riscv_opcode_t;
 
 /* Instruction is a simple alias (e.g. "mv" for "addi").  */
 #define	INSN_ALIAS		0x00000001
@@ -598,9 +761,11 @@ extern const char riscv_fpr_names_numeric[NFPR][NRC];
 extern const char riscv_fpr_names_abi[NFPR][NRC];
 extern const char * const riscv_rm[8];
 extern const char * const riscv_pred_succ[16];
+extern const char * const riscv_fence_time[16];
 extern const char riscv_vecr_names_numeric[NVECR][NRC];
 extern const char riscv_vecm_names_numeric[NVECM][NRC];
 extern const char * const riscv_vsew[8];
+extern const char * const riscv_vsew_alt[8];
 extern const char * const riscv_vlmul[8];
 extern const char * const riscv_vta[2];
 extern const char * const riscv_vma[2];

@@ -1199,6 +1199,11 @@ read_a_source_file (const char *name)
 		      if (next_char == ' ' || next_char == '\t')
 			input_line_pointer++;
 
+#if defined _RISCV_H_ && defined md_cleanup
+		      /* Emit a cached instruction before a directive.  */
+		      md_cleanup ();
+#endif
+
 		      /* Input_line is restored.
 			 Input_line_pointer->1st non-blank char
 			 after pseudo-operation.  */
@@ -1297,6 +1302,10 @@ read_a_source_file (const char *name)
 		      as_fatal (_("label \"%ld$\" redefined"), temp);
 		    }
 
+#if defined _RISCV_H_ && defined md_cleanup
+		  /* Emit a cached instruction before a label.  */
+		  md_cleanup ();
+#endif
 		  define_dollar_label (temp);
 		  colon (dollar_label_name (temp, 0));
 		  continue;
@@ -1305,6 +1314,10 @@ read_a_source_file (const char *name)
 	      if (LOCAL_LABELS_FB
 		  && *input_line_pointer++ == ':')
 		{
+#if defined _RISCV_H_ && defined md_cleanup
+		  /* Emit a cached instruction before a label.  */
+		  md_cleanup ();
+#endif
 		  fb_label_instance_inc (temp);
 		  colon (fb_label_name (temp, 0));
 		  continue;
@@ -2357,8 +2370,11 @@ s_globl (int ignore ATTRIBUTE_UNUSED)
       if ((name = read_symbol_name ()) == NULL)
 	return;
 
-      symbolP = symbol_find_or_make (name);
-      S_SET_EXTERNAL (symbolP);
+      if (!is_lto_discarded (name))
+	{
+	  symbolP = symbol_find_or_make (name);
+	  S_SET_EXTERNAL (symbolP);
+	}
 
       SKIP_WHITESPACE ();
       c = *input_line_pointer;
@@ -3244,7 +3260,13 @@ s_set (int equiv)
     }
 
   input_line_pointer++;
-  assign_symbol (name, equiv);
+  if (is_lto_discarded (name))
+    {
+      expressionS exp;
+      get_known_segmented_expression (&exp);
+    }
+  else
+    assign_symbol (name, equiv);
   demand_empty_rest_of_line ();
   free (name);
 }
@@ -3789,6 +3811,9 @@ s_weakref (int ignore ATTRIBUTE_UNUSED)
   if ((name = read_symbol_name ()) == NULL)
     return;
 
+  if (is_lto_discarded (name))
+    goto err_out;
+
   symbolP = symbol_find_or_make (name);
 
   if (S_IS_DEFINED (symbolP) || symbol_equated_p (symbolP))
@@ -4189,6 +4214,10 @@ cons_worker (int nbytes,	/* 1=.byte, 2=.word, 4=.long.  */
       ++c;
     }
   while (*input_line_pointer++ == ',');
+
+#ifdef TC_CONS_COUNT_CHECK
+  TC_CONS_COUNT_CHECK (c);
+#endif
 
   /* In MRI mode, after an odd number of bytes, we must align to an
      even word boundary, unless the next instruction is a dc.b, ds.b
@@ -4681,6 +4710,7 @@ void
 emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	       TC_PARSE_CONS_RETURN_TYPE r ATTRIBUTE_UNUSED)
 {
+  fixS *fix = NULL;
   int offset = 0;
   unsigned int size = nbytes;
 
@@ -4731,8 +4761,10 @@ emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	as_bad (_("unsupported BFD relocation size %u"), size);
 	return;
       }
-  fix_new_exp (frag, p - frag->fr_literal + offset, size,
-	       exp, 0, r);
+  fix = fix_new_exp (frag, p - frag->fr_literal + offset, size, exp, 0, r);
+#endif
+#ifdef TC_CONS_FIX_NEW_POST
+  TC_CONS_FIX_NEW_POST (fix, exp);
 #endif
 }
 
@@ -5095,7 +5127,7 @@ output_sleb128 (char *p, offsetT value)
 }
 
 static inline unsigned int
-output_uleb128 (char *p, valueT value)
+output_uleb128 (char *p, valueT value, bool plus)
 {
   char *orig = p;
 
@@ -5112,16 +5144,22 @@ output_uleb128 (char *p, valueT value)
     }
   while (value != 0);
 
+  if (plus)
+    {
+      *(p-1) |= 0x80;
+      *(p++) = 0;
+    }
+
   return p - orig;
 }
 
 unsigned int
-output_leb128 (char *p, valueT value, int sign)
+output_leb128 (char *p, valueT value, int sign, bool plus)
 {
   if (sign)
     return output_sleb128 (p, (offsetT) value);
   else
-    return output_uleb128 (p, value);
+    return output_uleb128 (p, value, plus);
 }
 
 /* Do the same for bignums.  We combine sizeof with output here in that
@@ -5302,7 +5340,7 @@ emit_leb128_expr (expressionS *exp, int sign)
 
       size = sizeof_leb128 (value, sign);
       p = frag_more (size);
-      if (output_leb128 (p, value, sign) > size)
+      if (output_leb128 (p, value, sign, false) > size)
 	abort ();
     }
   else if (op == O_big)
@@ -5330,7 +5368,7 @@ emit_leb128_expr (expressionS *exp, int sign)
       /* Otherwise, we have to create a variable sized fragment and
 	 resolve things later.  */
 
-      frag_var (rs_leb128, sizeof_uleb128 (~(valueT) 0), 0, sign,
+      frag_var (rs_leb128, sizeof_uleb128 (~(valueT) 0) + 1, 0, sign,
 		make_expr_symbol (exp), 0, (char *) NULL);
     }
 }

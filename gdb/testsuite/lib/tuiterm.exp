@@ -863,7 +863,7 @@ namespace eval Term {
 		# Make GDB not print the directory names.  Use this setting to
 		# remove the differences in test runs due to varying directory
 		# names.
-		append ::GDBFLAGS " -ex \"set filename-display basename\""
+		append ::GDBFLAGS " -q -ex \"set filename-display basename\""
 
 		if {$executable == ""} {
 		    ::clean_restart

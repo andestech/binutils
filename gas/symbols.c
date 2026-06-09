@@ -454,6 +454,11 @@ local_symbol_make (const char *name, segT section, fragS *frag, valueT val)
   ret->section = section;
   ret->value = val;
 
+#ifdef __ANDES__
+  /* b35102 */
+  local_symbol_append (ret);
+#endif
+
   htab_insert (sy_hash, ret, 1);
 
   return ret;
@@ -464,6 +469,11 @@ local_symbol_make (const char *name, segT section, fragS *frag, valueT val)
 static symbolS *
 local_symbol_convert (void *sym)
 {
+#ifdef __ANDES__
+  /* b35102 */
+  local_symbol_remove ((local_symbolS *)sym);
+#endif
+
   symbol_entry_t *ent = (symbol_entry_t *) sym;
   struct xsymbol *xtra;
   valueT val;

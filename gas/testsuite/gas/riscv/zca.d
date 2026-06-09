@@ -46,9 +46,9 @@ Disassembly of section .text:
 [ 	]+[0-9a-f]+:[ 	]+8006[ 	]+c.mv[ 	]+zero,ra
 [ 	]+[0-9a-f]+:[ 	]+0006[ 	]+c.slli[ 	]+zero,0x1
 [ 	]+[0-9a-f]+:[ 	]+0002[ 	]+c.slli64[ 	]+zero
-[ 	]+[0-9a-f]+:[ 	]+d845[ 	]+c.beqz[ 	]+s0,0[ ]+\<target\>
-[ 	]+[0-9a-f]+:[ 	]+f45d[ 	]+c.bnez[ 	]+s0,0[ ]+\<target\>
-[ 	]+[0-9a-f]+:[ 	]+b775[ 	]+c.j[ 	]+0[ ]+\<target\>
+[ 	]+[0-9a-f]+:[ 	]+d845[ 	]+c.beqz[ 	]+s0,0x0[ ]+\<target\>
+[ 	]+[0-9a-f]+:[ 	]+f45d[ 	]+c.bnez[ 	]+s0,0x0[ ]+\<target\>
+[ 	]+[0-9a-f]+:[ 	]+b775[ 	]+c.j[ 	]+0x0[ ]+\<target\>
 [ 	]+[0-9a-f]+:[ 	]+8082[ 	]+c.jr[ 	]+ra
 [ 	]+[0-9a-f]+:[ 	]+9082[ 	]+c.jalr[ 	]+ra
 [ 	]+[0-9a-f]+:[ 	]+9002[ 	]+c.ebreak

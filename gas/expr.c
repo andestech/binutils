@@ -1157,6 +1157,21 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	  {
 	    if (op != O_absent)
 	      {
+		/* -(a - b) → (b - a), to preserve ADD/SUB relocations.  */
+		if (op == O_uminus
+		    && expressionP->X_op == O_subtract
+#ifdef md_allow_local_subtract
+		    && !md_allow_local_subtract (expressionP, expressionP,
+						 S_GET_SEGMENT (expressionP->X_add_symbol))
+#endif
+		   )
+		  {
+		    symbolS *tmp = expressionP->X_add_symbol;
+		    expressionP->X_add_symbol = expressionP->X_op_symbol;
+		    expressionP->X_op_symbol = tmp;
+		    expressionP->X_add_number = -expressionP->X_add_number;
+		    break;
+		  }
 		expressionP->X_add_symbol = make_expr_symbol (expressionP);
 		expressionP->X_op = op;
 		expressionP->X_add_number = 0;
@@ -2098,12 +2113,30 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	      if (retval == rightseg
 		  && SEG_NORMAL (retval)
 		  && !S_FORCE_RELOC (resultP->X_add_symbol, 0)
-		  && !S_FORCE_RELOC (right.X_add_symbol, 0))
+		  && !S_FORCE_RELOC (right.X_add_symbol, 0)
+#ifdef md_allow_local_subtract
+		  && md_allow_local_subtract (resultP, &right, retval)
+#endif
+		  )
 		{
 		  retval = absolute_section;
 		  rightseg = absolute_section;
 		}
 	    }
+	}
+      /* const - (a - b) → (b - a) + const, to preserve ADD/SUB relocations.  */
+      else if (op_left == O_subtract
+	       && resultP->X_op == O_constant
+	       && right.X_op == O_subtract
+#ifdef md_allow_local_subtract
+	       && !md_allow_local_subtract (resultP, &right, retval)
+#endif
+	      )
+	{
+	  resultP->X_op = O_subtract;
+	  resultP->X_add_symbol = right.X_op_symbol;
+	  resultP->X_op_symbol = right.X_add_symbol;
+	  subtract_from_result (resultP, right.X_add_number, right.X_extrabit);
 	}
       else
 	{

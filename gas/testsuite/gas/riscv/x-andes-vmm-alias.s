@@ -1,0 +1,21 @@
+target:
+	vqammuu.vv v4, v8, v12
+	vqammus.vv v4, v8, v12
+	vqammsu.vv v4, v8, v12
+	vqammss.vv v4, v8, v12
+	vle8.mk v4, (a0), a1
+	vle8.mk v4, 0(a0), a1
+	vle8.nk v4, (a0), a1
+	vle8.nk v4, 0(a0), a1
+	vle8.kn v4, (a0), a1
+	vle8.kn v4, 0(a0), a1
+	vle32.mn v4, (a0), a1
+	vle32.mn v4, 0(a0), a1
+	vse8.nk v4, (a0), a1
+	vse8.nk v4, 0(a0), a1
+	vse8.kn v4, (a0), a1
+	vse8.kn v4, 0(a0), a1
+	vse32.nm v4, (a0), a1
+	vse32.nm v4, 0(a0), a1
+	vse32.mn v4, (a0), a1
+	vse32.mn v4, 0(a0), a1

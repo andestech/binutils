@@ -1524,7 +1524,7 @@ out_four (int data)
 static void
 out_uleb128 (addressT value)
 {
-  output_leb128 (frag_more (sizeof_leb128 (value, 0)), value, 0);
+  output_leb128 (frag_more (sizeof_leb128 (value, 0)), value, 0, false);
 }
 
 /* Emit a signed "little-endian base 128" number.  */
@@ -1532,7 +1532,7 @@ out_uleb128 (addressT value)
 static void
 out_leb128 (addressT value)
 {
-  output_leb128 (frag_more (sizeof_leb128 (value, 1)), value, 1);
+  output_leb128 (frag_more (sizeof_leb128 (value, 1)), value, 1, false);
 }
 
 /* Emit a tuple for .debug_abbrev.  */
@@ -1689,7 +1689,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
       else if (addr_delta)
 	{
 	  *p++ = DW_LNS_advance_pc;
-	  p += output_leb128 (p, addr_delta, 0);
+	  p += output_leb128 (p, addr_delta, 0, false);
 	}
 
       *p++ = DW_LNS_extended_op;
@@ -1706,7 +1706,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
   if (tmp >= DWARF2_LINE_RANGE)
     {
       *p++ = DW_LNS_advance_line;
-      p += output_leb128 (p, line_delta, 1);
+      p += output_leb128 (p, line_delta, 1, false);
 
       line_delta = 0;
       tmp = 0 - DWARF2_LINE_BASE;
@@ -1747,7 +1747,7 @@ emit_inc_line_addr (int line_delta, addressT addr_delta, char *p, int len)
 
   /* Otherwise use DW_LNS_advance_pc.  */
   *p++ = DW_LNS_advance_pc;
-  p += output_leb128 (p, addr_delta, 0);
+  p += output_leb128 (p, addr_delta, 0, false);
 
   if (need_copy)
     *p++ = DW_LNS_copy;
@@ -1822,7 +1822,7 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
   if (line_delta != INT_MAX)
     {
       *p++ = DW_LNS_advance_line;
-      p += output_leb128 (p, line_delta, 1);
+      p += output_leb128 (p, line_delta, 1, false);
     }
 
   pexp = symbol_get_value_expression (frag->fr_symbol);
@@ -1842,7 +1842,7 @@ emit_fixed_inc_line_addr (int line_delta, addressT addr_delta, fragS *frag,
       to_sym = pexp->X_add_symbol;
 
       *p++ = DW_LNS_extended_op;
-      p += output_leb128 (p, sizeof_address + 1, 0);
+      p += output_leb128 (p, sizeof_address + 1, 0, false);
       *p++ = DW_LNE_set_address;
       exp.X_op = O_symbol;
       exp.X_add_symbol = to_sym;
@@ -2987,14 +2987,33 @@ out_debug_info (segT info_seg, segT abbrev_seg, segT line_seg, segT str_seg,
 	  if (DWARF2_VERSION < 4)
 	    {
 	      if (size.X_op == O_constant)
-		size.X_op = O_symbol;
-	      size.X_add_symbol = symp;
-	      emit_expr (&size, sizeof_address);
+		{
+		  size.X_op = O_symbol;
+		  size.X_add_symbol = symp;
+		  emit_expr (&size, sizeof_address);
+		}
+	      else
+		{
+		  exp.X_op = O_symbol;
+		  exp.X_add_symbol = symbol_get_value_expression (size.X_op_symbol)->X_add_symbol;
+		  exp.X_op_symbol = NULL;
+		  exp.X_add_number = 0;
+		  emit_expr (&exp, sizeof_address);
+		}
 	    }
-	  else if (size.X_op == O_constant)
-	    out_uleb128 (size.X_add_number);
 	  else
-	    emit_leb128_expr (symbol_get_value_expression (size.X_op_symbol), 0);
+	    {
+	      if (size.X_op == O_constant)
+		out_uleb128 (size.X_add_number);
+	      else
+		{
+		  exp.X_op = O_subtract;
+		  exp.X_add_symbol = symbol_get_value_expression (size.X_op_symbol)->X_add_symbol;
+		  exp.X_op_symbol = symbol_get_value_expression (size.X_op_symbol)->X_op_symbol;
+		  exp.X_add_number = 0;
+		  emit_leb128_expr (&exp, 0);
+		}
+	    }
 	}
 
       if (DWARF2_VERSION > 2)

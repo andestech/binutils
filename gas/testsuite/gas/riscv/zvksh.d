@@ -1,5 +1,5 @@
 #as: -march=rv64gc_zvksh
-#objdump: -dr
+#objdump: -d
 
 .*:[ 	]+file format .*
 

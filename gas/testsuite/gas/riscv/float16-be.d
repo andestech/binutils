@@ -1,6 +1,6 @@
 # source: float16.s
 # objdump: -sj .data
-# as: -mbig-endian
+# as: -march=rv32i -mbig-endian
 
 .*:[ 	]+file format .*bigriscv
 

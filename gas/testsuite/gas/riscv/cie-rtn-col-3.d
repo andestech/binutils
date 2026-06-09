@@ -1,5 +1,5 @@
 #objdump: --dwarf=frames
-#as: --gdwarf-cie-version=3
+#as: -march=rv32i --gdwarf-cie-version=3
 #source: cie-rtn-col.s
 
 .*:     file format elf.*-.*riscv

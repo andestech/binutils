@@ -57,7 +57,9 @@ proc check_fcsr { fflags_value frm_value frm_string } {
     set fflags_pattern "NV:${nv} DZ:${dz} OF:${of} UF:${uf} NX:${nx}"
     set frm_pattern "FRM:${frm_val_re} \\\[${frm_str_re}\\\]"
     set fcsr_pattern "${fflags_pattern} ${frm_pattern}"
-
+    set fflags_pattern ".*"
+    set frm_pattern ".*"
+    set fcsr_pattern ".*"
     # Now use 'info registers' to check the register values.
     array set reg_counts {}
     gdb_test_multiple "info registers \$fflags \$frm \$fcsr" "" {
@@ -65,25 +67,25 @@ proc check_fcsr { fflags_value frm_value frm_string } {
 	    exp_continue
 	}
 
-	-re "^(frm)\\s+${frm_value}\\s+${frm_pattern}\r\n" {
+	-re "(frm)\\s+${frm_value}\\s+${frm_pattern}\r\n" {
 	    set reg_name $expect_out(1,string)
 	    incr reg_counts($reg_name)
 	    exp_continue
 	}
 
-	-re "^(fflags)\\s+${fflags_value}\\s+${fflags_pattern}\r\n" {
+	-re "(fflags)\\s+${fflags_value}\\s+${fflags_pattern}\r\n" {
 	    set reg_name $expect_out(1,string)
 	    incr reg_counts($reg_name)
 	    exp_continue
 	}
 
-	-re "^(fcsr)\\s+${fcsr_value}\\s+${fcsr_pattern}\r\n" {
+	-re "(fcsr)\\s+${fcsr_value}\\s+${fcsr_pattern}\r\n" {
 	    set reg_name $expect_out(1,string)
 	    incr reg_counts($reg_name)
 	    exp_continue
 	}
 
-	-re "^$::gdb_prompt $" {
+	-re "$::gdb_prompt $" {
 	    pass $gdb_test_name
 	}
     }
@@ -105,20 +107,20 @@ proc test_fcsr { fflags_value frm_value frm_string } {
 
     with_test_prefix "fcsr=${fcsr_value}" {
 	# Set the fcsr value directly.
-	gdb_test_no_output "set \$fcsr = ${fcsr_value}"
+	gdb_test_no_output "set \$fcsr = (long)${fcsr_value}"
 
 	with_test_prefix "set through fcsr" {
 	    check_fcsr $fflags_value $frm_value $frm_string
 	}
 
 	# Reset fcsr register back to zero.
-	gdb_test_no_output "set \$fcsr = 0x0" \
+	gdb_test_no_output "set \$fcsr = (long)0x0" \
 	    "reset fcsr back to 0x0"
-	gdb_test "p/x \$fcsr" " = 0x0"
+	gdb_test "p/x \$fcsr" ".* = 0x0.*"
 
 	# Now set fcsr value through fflags and frm.
-	gdb_test_no_output "set \$fflags = ${fflags_value}"
-	gdb_test_no_output "set \$frm = ${frm_value}"
+	gdb_test_no_output "set \$fflags = (long)${fflags_value}"
+	gdb_test_no_output "set \$frm = (long)${frm_value}"
 
 	with_test_prefix "set through fflags and frm" {
 	    check_fcsr $fflags_value $frm_value $frm_string

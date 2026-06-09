@@ -184,7 +184,7 @@ am__installdirs = "$(DESTDIR)$(bfdlibdir)" \
 	"$(DESTDIR)$(bfdincludedir)"
 LTLIBRARIES = $(bfdlib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-am_libopcodes_la_OBJECTS = dis-buf.lo disassemble.lo dis-init.lo
+am_libopcodes_la_OBJECTS = aes.lo dis-buf.lo disassemble.lo dis-init.lo
 libopcodes_la_OBJECTS = $(am_libopcodes_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -675,6 +675,7 @@ TARGET32_LIBOPCODES_CFILES = \
 LIBOPCODES_CFILES = \
 	$(TARGET32_LIBOPCODES_CFILES) \
 	$(TARGET64_LIBOPCODES_CFILES) \
+	aes.c \
 	dis-buf.c \
 	dis-init.c \
 	disassemble.c
@@ -686,7 +687,7 @@ OFILES = @BFD_MACHINES@
 # development.sh is used to determine -Werror default.
 CONFIG_STATUS_DEPENDENCIES = $(BFDDIR)/development.sh
 AM_CPPFLAGS = -I. -I$(srcdir) -I../bfd -I$(INCDIR) -I$(BFDDIR) @HDEFINES@ @INCINTL@
-libopcodes_la_SOURCES = dis-buf.c disassemble.c dis-init.c
+libopcodes_la_SOURCES = aes.c dis-buf.c disassemble.c dis-init.c
 libopcodes_la_DEPENDENCIES = $(OFILES) @SHARED_DEPENDENCIES@
 libopcodes_la_LIBADD = $(OFILES) @SHARED_LIBADD@
 # Allow dependency tracking to work on all the source files.
@@ -882,6 +883,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aarch64-dis.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aarch64-opc-2.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aarch64-opc.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/aes.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/alpha-dis.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/alpha-opc.Plo@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/arc-dis.Plo@am__quote@

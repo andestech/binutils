@@ -1455,7 +1455,15 @@ struct step_over_info
    have breakpoint locations -- e.g., stepping past a single-step
    breakpoint, or stepping to complete a non-continuable
    watchpoint.  */
-static struct step_over_info step_over_info;
+#define NDS_STEP_OVER_NUMS   512
+static struct step_over_info step_over_info[NDS_STEP_OVER_NUMS];
+static int nds_get_inf_num (void)
+{
+  int inf_num = current_inferior ()->num;
+  if (inf_num >= NDS_STEP_OVER_NUMS)
+    inf_num = (inf_num % NDS_STEP_OVER_NUMS);
+  return inf_num;
+}
 
 /* Record the address of the breakpoint/instruction we're currently
    stepping over.
@@ -1467,10 +1475,11 @@ set_step_over_info (const address_space *aspace, CORE_ADDR address,
 		    int nonsteppable_watchpoint_p,
 		    int thread)
 {
-  step_over_info.aspace = aspace;
-  step_over_info.address = address;
-  step_over_info.nonsteppable_watchpoint_p = nonsteppable_watchpoint_p;
-  step_over_info.thread = thread;
+  int inf_num = nds_get_inf_num ();
+  step_over_info[inf_num].aspace = aspace;
+  step_over_info[inf_num].address = address;
+  step_over_info[inf_num].nonsteppable_watchpoint_p = nonsteppable_watchpoint_p;
+  step_over_info[inf_num].thread = thread;
 }
 
 /* Called when we're not longer stepping over a breakpoint / an
@@ -1480,10 +1489,11 @@ static void
 clear_step_over_info (void)
 {
   infrun_debug_printf ("clearing step over info");
-  step_over_info.aspace = nullptr;
-  step_over_info.address = 0;
-  step_over_info.nonsteppable_watchpoint_p = 0;
-  step_over_info.thread = -1;
+  int inf_num = nds_get_inf_num ();
+  step_over_info[inf_num].aspace = nullptr;
+  step_over_info[inf_num].address = 0;
+  step_over_info[inf_num].nonsteppable_watchpoint_p = 0;
+  step_over_info[inf_num].thread = -1;
 }
 
 /* See infrun.h.  */
@@ -1492,10 +1502,11 @@ int
 stepping_past_instruction_at (struct address_space *aspace,
 			      CORE_ADDR address)
 {
-  return (step_over_info.aspace != nullptr
+  int inf_num = nds_get_inf_num ();
+  return (step_over_info[inf_num].aspace != nullptr
 	  && breakpoint_address_match (aspace, address,
-				       step_over_info.aspace,
-				       step_over_info.address));
+				       step_over_info[inf_num].aspace,
+				       step_over_info[inf_num].address));
 }
 
 /* See infrun.h.  */
@@ -1503,8 +1514,9 @@ stepping_past_instruction_at (struct address_space *aspace,
 int
 thread_is_stepping_over_breakpoint (int thread)
 {
-  return (step_over_info.thread != -1
-	  && thread == step_over_info.thread);
+  int inf_num = nds_get_inf_num ();
+  return (step_over_info[inf_num].thread != -1
+	  && thread == step_over_info[inf_num].thread);
 }
 
 /* See infrun.h.  */
@@ -1512,7 +1524,8 @@ thread_is_stepping_over_breakpoint (int thread)
 int
 stepping_past_nonsteppable_watchpoint (void)
 {
-  return step_over_info.nonsteppable_watchpoint_p;
+  int inf_num = nds_get_inf_num ();
+  return step_over_info[inf_num].nonsteppable_watchpoint_p;
 }
 
 /* Returns true if step-over info is valid.  */
@@ -1520,7 +1533,8 @@ stepping_past_nonsteppable_watchpoint (void)
 static bool
 step_over_info_valid_p (void)
 {
-  return (step_over_info.aspace != nullptr
+  int inf_num = nds_get_inf_num ();
+  return (step_over_info[inf_num].aspace != nullptr
 	  || stepping_past_nonsteppable_watchpoint ());
 }
 
@@ -3933,8 +3947,10 @@ for_each_just_stopped_thread (for_each_just_stopped_thread_callback_func func)
   else
     {
       /* In all-stop mode, all threads have stopped.  */
-      for (thread_info *tp : all_non_exited_threads ())
-	func (tp);
+      func (inferior_thread ());
+			/*
+			for (thread_info *tp : all_non_exited_threads ())
+	func (tp);*/
     }
 }
 
@@ -4181,6 +4197,11 @@ do_target_wait (execution_control_state *ecs, target_wait_flags options)
     return (ecs->ws.kind () != TARGET_WAITKIND_IGNORE);
   };
 
+  if (!target_async_permitted) {
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, random_selector inferior=0x%x ", selected);
+    selected = current_inferior ();
+    //fprintf_unfiltered (gdb_stdlog, "\n do_target_wait, new_random_selector inferior=0x%x ", selected);
+  }
   /* Needed in 'all-stop + target-non-stop' mode, because we end up
      here spuriously after the target is all stopped and we've already
      reported the stop to the user, polling for events.  */
@@ -4260,11 +4281,12 @@ prepare_for_detach (void)
   /* If we were already in the middle of an inline step-over, and the
      thread stepping belongs to the inferior we're detaching, we need
      to restart the threads of other inferiors.  */
-  if (step_over_info.thread != -1)
+  int inf_num = nds_get_inf_num ();
+  if (step_over_info[inf_num].thread != -1)
     {
       infrun_debug_printf ("inline step-over in-process while detaching");
 
-      thread_info *thr = find_thread_global_id (step_over_info.thread);
+      thread_info *thr = find_thread_global_id (step_over_info[inf_num].thread);
       if (thr->inf == inf)
 	{
 	  /* Since we removed threads of INF from the step-over chain,
@@ -5804,7 +5826,12 @@ handle_no_resumed (struct execution_control_state *ecs)
   inferior *curr_inf = current_inferior ();
 
   scoped_restore_current_thread restore_thread;
-  update_thread_list ();
+
+  for (auto *target : all_non_exited_process_targets ())
+    {
+      switch_to_target_no_thread (target);
+      update_thread_list ();
+    }
 
   /* If:
 

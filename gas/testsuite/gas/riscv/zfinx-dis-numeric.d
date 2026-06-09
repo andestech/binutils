@@ -1,6 +1,6 @@
 #as: -march=rv64ima_zfinx
 #source: zfinx-dis-numeric.s
-#objdump: -dr -Mnumeric
+#objdump: -d -Mnumeric
 
 .*:[ 	]+file format .*
 

@@ -19,8 +19,19 @@
 # This program assumes gdb and objcopy are in $PATH.
 # If not, or you want others, pass the following in the environment
 GDB=${GDB:=gdb}
-OBJCOPY=${OBJCOPY:=objcopy}
-READELF=${READELF:=readelf}
+#OBJCOPY=${OBJCOPY:=objcopy}
+#READELF=${READELF:=readelf}
+
+printenv PATH|grep nds32le
+if [ $? -eq 0 ];then
+    export OBJCOPY=${OBJCOPY:=riscv32-elf-objcopy}
+		export READELF=${READELF:=riscv32-elf-readelf}
+fi
+printenv PATH|grep nds64le
+if [ $? -eq 0 ];then
+    export OBJCOPY=${OBJCOPY:=riscv64-elf-objcopy}
+		export READELF=${READELF:=riscv64-elf-readelf}
+fi
 
 myname="${0##*/}"
 

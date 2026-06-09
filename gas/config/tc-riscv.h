@@ -104,13 +104,28 @@ extern void riscv_md_end (void);
 #define TC_FORCE_RELOCATION_LOCAL(FIX) 1
 #define DIFF_EXPR_OK 1
 
+/* { Andes */
+#define __ANDES__
+#define DEFAULT_ICT_VERSION 1
+
+#define TC_CONS_COUNT_CHECK tc_cons_count_check
+extern void tc_cons_count_check (int);
+#define TC_CONS_FIX_NEW_POST tc_cons_fix_new_post_riscv
+extern void tc_cons_fix_new_post_riscv (void *, expressionS *);
+
+extern bool is_lto_discarded (char *);
+
 struct riscv_fix
 {
+  int ict;
   int source_macro;
 };
 
 #define TC_FIX_TYPE struct riscv_fix
-#define TC_INIT_FIX_DATA(FIX) (FIX)->tc_fix_data.source_macro = -1
+#define TC_INIT_FIX_DATA(FIX)		\
+  (FIX)->tc_fix_data.ict = 0;		\
+  (FIX)->tc_fix_data.source_macro = -1;
+/* } Andes */
 
 extern void riscv_pop_insert (void);
 #define md_pop_insert()		riscv_pop_insert ()
@@ -135,8 +150,9 @@ extern void riscv_elf_final_processing (void);
 #define DWARF2_USE_FIXED_ADVANCE_PC 1
 
 #define md_parse_name(name, exp, mode, c) \
-  riscv_parse_name (name, exp, mode)
-bool riscv_parse_name (const char *, struct expressionS *, enum expr_mode);
+  riscv_parse_name (name, exp, mode, c)
+bool riscv_parse_name (const char *, struct expressionS *, enum expr_mode,
+		       char *);
 
 #define md_finish riscv_md_finish
 #define CONVERT_SYMBOLIC_ATTRIBUTE riscv_convert_symbolic_attribute
@@ -144,9 +160,28 @@ bool riscv_parse_name (const char *, struct expressionS *, enum expr_mode);
 extern void riscv_md_finish (void);
 extern int riscv_convert_symbolic_attribute (const char *);
 
+#define md_cleanup riscv_md_cleanup
+#define TC_START_LABEL(STR, NUL_CHAR, NEXT_CHAR) \
+  (NEXT_CHAR == ':' && riscv_md_cleanup ())
+
+extern bfd_boolean riscv_md_cleanup (void);
+
+#define md_insert_uleb128_fixes riscv_md_insert_uleb128_fixes
+extern void riscv_md_insert_uleb128_fixes (void);
+
 /* Set mapping symbol states.  */
 #define md_cons_align(nbytes) riscv_mapping_state (MAP_DATA, 0, 0)
 void riscv_mapping_state (enum riscv_seg_mstate, int, bool);
+
+/* { Andes */
+#define md_post_relax_hook riscv_post_relax_hook ()
+extern void riscv_post_relax_hook (void);
+
+/* b35102 */
+extern void local_symbol_append (local_symbolS *sym);
+extern void local_symbol_remove (local_symbolS *sym);
+extern void b35102_print_log (void);
+/* } Andes */
 
 /* Define target segment type.  */
 #define TC_SEGMENT_INFO_TYPE struct riscv_segment_info_type

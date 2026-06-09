@@ -70,6 +70,7 @@ static bfd_size_type common_size;
 static bfd_size_type total_bsssize;
 static bfd_size_type total_datasize;
 static bfd_size_type total_textsize;
+static bfd_size_type total_rodata_size;
 
 /* Program exit status.  */
 static int return_code = 0;
@@ -267,6 +268,10 @@ main (int argc, char **argv)
 
       rprint_number (col_width, total_textsize);
       putchar(sep_char);
+      rprint_number (col_width, total_textsize - total_rodata_size);
+      putchar(sep_char);
+      rprint_number (col_width, total_rodata_size);
+      putchar(sep_char);
       rprint_number (col_width, total_datasize);
       putchar(sep_char);
       rprint_number (col_width, total_bsssize);
@@ -461,6 +466,7 @@ rprint_number (int width, bfd_size_type num)
 static bfd_size_type bsssize;
 static bfd_size_type datasize;
 static bfd_size_type textsize;
+static bfd_size_type rodata_size;
 
 static void
 berkeley_or_gnu_sum (bfd *abfd ATTRIBUTE_UNUSED, sec_ptr sec,
@@ -482,6 +488,11 @@ berkeley_or_gnu_sum (bfd *abfd ATTRIBUTE_UNUSED, sec_ptr sec,
     datasize += size;
   else
     bsssize += size;
+
+  if ((flags & SEC_DATA) != 0
+      && (flags & SEC_READONLY) != 0
+      && (flags & SEC_CODE) == 0)
+    rodata_size = rodata_size + size;
 }
 
 static void
@@ -495,6 +506,7 @@ print_berkeley_or_gnu_format (bfd *abfd)
   bsssize = 0;
   datasize = 0;
   textsize = 0;
+  rodata_size = 0;
 
   bfd_map_over_sections (abfd, berkeley_or_gnu_sum, NULL);
 
@@ -502,8 +514,9 @@ print_berkeley_or_gnu_format (bfd *abfd)
   if (files_seen++ == 0)
     {
       if (selected_output_format == FORMAT_BERKLEY)
-	puts ((radix == octal) ? "   text\t   data\t    bss\t    oct\t    hex\tfilename" :
-	      "   text\t   data\t    bss\t    dec\t    hex\tfilename");
+	puts ((radix == octal) ?
+	      "   text\t   code\t rodata\t   data\t    bss\t    oct\t    hex\tfilename" :
+	      "   text\t   code\t rodata\t   data\t    bss\t    dec\t    hex\tfilename");
       else
 	puts ("      text       data        bss      total filename");
     }
@@ -515,9 +528,14 @@ print_berkeley_or_gnu_format (bfd *abfd)
       total_textsize += textsize;
       total_datasize += datasize;
       total_bsssize  += bsssize;
+      total_rodata_size += rodata_size;
     }
 
   rprint_number (col_width, textsize);
+  putchar (sep_char);
+  rprint_number (col_width, textsize - rodata_size);
+  putchar (sep_char);
+  rprint_number (col_width, rodata_size);
   putchar (sep_char);
   rprint_number (col_width, datasize);
   putchar (sep_char);

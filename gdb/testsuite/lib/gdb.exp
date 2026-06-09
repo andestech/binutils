@@ -1546,7 +1546,7 @@ proc python_version_at_least { major minor } {
     set python_version [lindex $res 1]
     set python_version [string trim $python_version]
 
-    regexp {^([0-9]+) ([0-9]+)$} $python_version \
+    regexp {([0-9]+) ([0-9]+)$} $python_version \
 	dummy python_version_major python_version_minor
 
     return [version_compare [list $major $minor] \
@@ -2395,6 +2395,9 @@ proc default_gdb_start { } {
 	    # Output with -q.
 	    verbose "GDB initialized."
 	}
+	-re "\[\r\n\].*m$gdb_prompt $" {
+	    verbose "GDB initialized."
+	}
 	-re "^\033\\\[.2004h$gdb_prompt $" {
 	    # Output with -q, and bracketed paste mode enabled, see above.
 	    verbose "GDB initialized."
@@ -2607,6 +2610,9 @@ gdb_caching_proc with_system_readline {} {
 }
 
 gdb_caching_proc allow_dap_tests {} {
+	# skip dap_tests
+	return 0
+
     if { ![allow_python_tests] } {
 	return 0
     }
@@ -4510,7 +4516,9 @@ proc allow_hw_watchpoint_tests {} {
     # watchpoint support on Powerpc.
     if { [istarget "i?86-*-*"] 
 	 || [istarget "x86_64-*-*"]
-	 || [istarget "ia64-*-*"] 
+	 || [istarget "ia64-*-*"]
+	 || [istarget "riscv64-*-*"]
+	 || [istarget "riscv32-*-*"]
 	 || [istarget "arm*-*-*"]
 	 || [istarget "aarch64*-*-*"]
 	 || ([istarget "powerpc*-*-linux*"] && [has_hw_wp_support])

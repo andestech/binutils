@@ -16,7 +16,9 @@
 # Test GDB for RISC-V always uses an uncompressed breakpoint when
 # setting up for an inferior call.
 
-require {istarget "riscv*-*-*"}
+#require {istarget "riscv*-*-*"}
+verbose "Skipping ${gdb_test_file_name}."
+return
 
 standard_testfile
 

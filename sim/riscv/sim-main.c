@@ -986,7 +986,8 @@ execute_one (SIM_CPU *cpu, unsigned_word iw, const struct riscv_opcode *op)
 
   switch (op->insn_class)
     {
-    case INSN_CLASS_A:
+    case INSN_CLASS_ZAAMO:
+    case INSN_CLASS_ZALRSC:
       return execute_a (cpu, iw, op);
     case INSN_CLASS_I:
       return execute_i (cpu, iw, op);

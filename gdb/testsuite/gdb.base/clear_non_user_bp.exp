@@ -41,7 +41,7 @@ standard_testfile .c
 
 # This testcase just needs a "Hello world" source file, reuse
 # gdb.base/main.c instead of adding a new one.
-if  { [gdb_compile "${srcdir}/${subdir}/main.c" "${binfile}" executable {debug}] != "" } {
+if  { [gdb_compile "${srcdir}/${subdir}/longjmp.c" "${binfile}" executable {debug}] != "" } {
     untested "failed to compile"
     return -1
 }
